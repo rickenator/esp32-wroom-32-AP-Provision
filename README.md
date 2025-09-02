@@ -111,7 +111,7 @@ esp32-wroom-32-AP-Provision/
 
 ### GPIO Pin Assignments
 
-- **Sound Sensor D0**: GPIO 15 (digital threshold detection)
+- **Sound Sensor D0**: GPIO 27 (digital threshold detection)
 - **Sound Sensor A0**: GPIO 34 (analog audio input)
 - **BOOT Button**: GPIO 0 (active-low, pull-up)
 - **Heartbeat LED**: GPIO 2 (optional, set to -1 to disable)

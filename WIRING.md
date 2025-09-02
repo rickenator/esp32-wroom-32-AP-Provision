@@ -13,7 +13,7 @@ This document shows the pin-to-pin connections for the ESP32 home monitoring dev
 
 | Component | ESP32 Pin | GPIO | Purpose |
 |-----------|-----------|------|---------|
-| KY-038 D0 | GPIO 15 | 15 | Digital sound detection (threshold) |
+| KY-038 D0 | GPIO 27 | 27 | Digital sound detection (threshold) |
 | KY-038 A0 | GPIO 34 | 34 | Analog audio input (ADC) |
 | BOOT Button | GPIO 0 | 0 | Built-in button for device management |
 | Heartbeat LED | GPIO 2 | 2 | Optional status LED (set to -1 to disable) |
@@ -30,7 +30,7 @@ ESP32-WROOM-32 DevKitC
 |                     |
 |   GPIO 0  [BOOT] <--|-- BOOT Button (built-in)
 |   GPIO 2  [LED]  <--|-- Heartbeat LED (optional)
-|   GPIO 15 [D0]   <--|-- KY-038 D0 (Digital)
+|   GPIO 27 [D0]   <--|-- KY-038 D0 (Digital)
 |   GPIO 34 [A0]   <--|-- KY-038 A0 (Analog)
 |                     |
 |   3.3V [PWR]     <--|-- KY-038 VCC
@@ -51,7 +51,7 @@ KY-038 Module
 |   [POT]  (Adjust    |
 |          sensitivity)|
 |                     |
-|   D0 [OUT] ------>  |-- ESP32 GPIO 15
+|   D0 [OUT] ------>  |-- ESP32 GPIO 27
 |   A0 [OUT] ------>  |-- ESP32 GPIO 34
 |   GND [GND] ------> |-- ESP32 GND
 |   VCC [VCC] ------> |-- ESP32 3.3V
@@ -74,7 +74,7 @@ GND  (black)  ------>  GND (black)
 ```
 ESP32 DevKitC          KY-038 Module
 -------------          -------------
-GPIO 15 (yellow) ----> D0 (yellow)    // Digital threshold detection
+GPIO 27 (yellow) ----> D0 (yellow)    // Digital threshold detection
 GPIO 34 (blue)   ----> A0 (blue)      // Analog audio input
 ```
 
@@ -92,7 +92,7 @@ GND            ---->  Cathode (-)    // via 220Ω resistor
 |-----------|------------|------------|---------|
 | 3.3V | Red | VCC | Power supply (3.3V) |
 | GND | Black | GND | Ground |
-| GPIO 15 | Yellow | D0 | Digital sound detection |
+| GPIO 27 | Yellow | D0 | Digital sound detection |
 | GPIO 34 | Blue | A0 | Analog audio input |
 | GPIO 2 | Green | - | Optional heartbeat LED |
 | GPIO 0 | - | - | Built-in BOOT button |
@@ -104,7 +104,7 @@ GND            ---->  Cathode (-)    // via 220Ω resistor
    - ESP32 3.3V → KY-038 VCC
    - ESP32 GND → KY-038 GND
 3. **Connect signal wires**:
-   - ESP32 GPIO 15 → KY-038 D0
+   - ESP32 GPIO 27 → KY-038 D0
    - ESP32 GPIO 34 → KY-038 A0
 4. **Optional: Connect LED**:
    - ESP32 GPIO 2 → LED anode (with 220Ω resistor)

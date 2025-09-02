@@ -95,7 +95,7 @@ void notificationTask(void *pv);
 // Sound sensor (KY-038) digital output (D0) pin. Change to the GPIO you wired D0 to.
 // The KY-038's LM393 comparator output is typically an open-collector style output;
 // using INPUT_PULLUP is recommended unless you provide an external pull-up.
-#define SOUND_DO_GPIO   15
+#define SOUND_DO_GPIO   27   // per board-ID; avoids GPIO15 boot-strap issues
 // Set to 1 if the module outputs HIGH when sound is detected, set to 0 if it outputs LOW
 // (some module configurations invert the logic via the onboard potentiometer).
 #define SOUND_DO_ACTIVE_HIGH 1
