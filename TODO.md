@@ -16,50 +16,13 @@ This project implements a home monitoring device with ESP32, KY-038 sound sensor
 ### Phase 1: Enhanced Digital Detection & Notifications (HIGH PRIORITY)
 **Status**: Partially implemented - basic detection working, notifications needed
 
-#### 1.1 Improve Sound Detection
-- [ ] **Implement debounced event counting** in firmware
-- [ ] **Add configurable detection thresholds** (currently fixed)
-- [ ] **Test D0 polarity variations** with `SOUND_DO_ACTIVE_HIGH` flag
-- [ ] **Add detection event logging** with timestamps
-
-#### 1.2 MQTT Integration
-- [ ] **Add MQTT client support** (PubSubClient library)
-- [ ] **Implement MQTT publish on detection** to configurable topic
-- [ ] **Add MQTT server/topic configuration** in provisioning UI
-- [ ] **Test MQTT message format** and payload schema
-- [ ] **Handle MQTT connection failures** gracefully
-
-#### 1.3 HTTP Webhook Support
-- [ ] **Implement HTTP POST webhook** on sound detection
-- [ ] **Add webhook URL configuration** in provisioning UI
-- [ ] **Define JSON payload schema** for webhook notifications
-- [ ] **Add retry logic** for failed webhook deliveries
-
-#### 1.4 Provisioning UI Enhancements
-- [ ] **Add sound calibration page** to captive portal
-- [ ] **Implement live D0 state monitoring** with JavaScript polling
-- [ ] **Add MQTT/webhook configuration fields** to web UI
-- [ ] **Store configurations** in NVS `sound` namespace
-
-### Phase 2: ADC Audio Recording Optimization (MEDIUM PRIORITY)
-**Status**: Basic implementation exists, needs Review.md improvements
-
-#### 2.1 Apply Review.md Recommendations
-- [ ] **Make ADC settings explicit**:
-  ```cpp
-  analogReadResolution(12);
-  analogSetPinAttenuation(SOUND_A0_GPIO, ADC_11db);
-  ```
-- [ ] **Disable WiFi power save**:
+#### 1.1 System Stability & Performance (MOVED FROM PHASE 2)
+- [ ] **Disable WiFi power save** for consistent timing:
   ```cpp
   WiFi.setSleep(false);
   esp_wifi_set_ps(WIFI_PS_NONE);
   ```
-- [ ] **Add DC blocker + soft gain** (HPF implementation)
-- [ ] **Consider moving DO from GPIO15** to GPIO27 (optional)
-
-#### 2.2 Performance Optimizations
-- [ ] **Lock CPU frequency** to prevent timing jitter:
+- [ ] **Lock CPU frequency** to prevent ISR jitter:
   ```cpp
   esp_pm_config_t pm = {
     .max_freq_mhz = 240,
@@ -68,60 +31,166 @@ This project implements a home monitoring device with ESP32, KY-038 sound sensor
   };
   esp_pm_configure(&pm);
   ```
-- [ ] **Pin ADC task to core 1** to avoid WiFi contention
-- [ ] **Implement deterministic sampling** with I2S-ADC DMA
-- [ ] **Add hardware decoupling** (0.1µF capacitor on KY-038 VCC)
+- [ ] **Add NTP time sync** for accurate timestamps
+- [ ] **Implement RC anti-alias filter** (1kΩ + 39nF) at ADC pin
+- [ ] **Add 0.1µF decoupling capacitor** on KY-038 VCC
+- [ ] **Test boot safety** with sensor attached (GPIO15 strap concerns)
 
-#### 2.3 Audio Processing Improvements
-- [ ] **Replace busy-wait with timer-based sampling**
-- [ ] **Implement circular buffer** for continuous capture
-- [ ] **Add audio level monitoring** and statistics
+#### 1.2 Enhanced Sound Detection
+- [ ] **Implement advanced debouncing** with configurable parameters:
+  - `T_min_ms`: Minimum event duration (100ms default)
+  - `T_quiet_ms`: Quiet period to end event (300ms default)
+  - `level_threshold`: ADC RMS threshold
+- [ ] **Add event counting and statistics** (events/minute, RMS/peak tracking)
+- [ ] **Test D0 polarity variations** with `SOUND_DO_ACTIVE_HIGH` flag
+- [ ] **Add detection event logging** with NTP timestamps
+
+#### 1.3 MQTT Integration
+- [ ] **Add MQTT client support** (PubSubClient library with TLS)
+- [ ] **Implement MQTT publish on detection** with QoS 1
+- [ ] **Add LWT (Last Will & Testament)** for offline detection
+- [ ] **Create topic structure**:
+  - `home/esp32/<id>/status` (retained)
+  - `home/esp32/<id>/sound/event`
+  - `home/esp32/<id>/sound/level` (periodic)
+- [ ] **Define JSON payload schema**:
+  ```json
+  {
+    "ts":"2025-09-02T18:12:45Z",
+    "seq": 1234,
+    "duration_ms": 420,
+    "rms": 812,
+    "peak": 2014,
+    "do_edges": 3,
+    "fw":"0.2.0",
+    "id":"esp32-xxxx"
+  }
+  ```
+
+#### 1.4 HTTP Webhook Support
+- [ ] **Implement HTTP POST webhook** with same JSON schema
+- [ ] **Add HMAC signature** with webhook_secret
+- [ ] **Implement retry/backoff logic** (3 attempts: 0s/2s/10s)
+- [ ] **Add event queuing** for offline scenarios
+
+#### 1.5 Provisioning UI Enhancements
+- [ ] **Add sound calibration page** with live monitoring:
+  - Real-time DO state display
+  - ADC meters (RMS/peak over 200ms windows)
+  - Sliders for threshold, T_min, T_quiet parameters
+- [ ] **Add connectivity test buttons** ("Test MQTT", "Test Webhook")
+- [ ] **Add time zone & NTP configuration**
+- [ ] **Implement unique default passwords** for security
+- [ ] **Store configurations** in NVS namespaces:
+  ```
+  sound: { do_active_high, t_min_ms, t_quiet_ms, level_threshold }
+  net: { mqtt_host, mqtt_port, mqtt_user, mqtt_pass, topic_base, webhook_url, webhook_secret }
+  sys: { timezone, ntp_server, device_name }
+  ```
+
+#### 1.6 Security & Operations
+- [ ] **Disable captive portal** after WiFi provisioning
+- [ ] **Add factory reset** via GPIO hold on boot
+- [ ] **Implement provisioning security** measures
+
+### Phase 2: ADC Audio Recording Optimization (MEDIUM PRIORITY)
+**Status**: Basic implementation exists, needs Review.md improvements
+
+### Phase 2: ADC Audio Recording Optimization (MEDIUM PRIORITY)
+**Status**: Basic implementation exists, needs Review.md improvements
+
+#### 2.1 I2S-ADC DMA Implementation (PRIMARY PATH)
+- [ ] **Implement I2S-ADC DMA** for deterministic 8kHz sampling:
+  ```cpp
+  i2s_config_t cfg = {
+    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
+    .sample_rate = 8000,
+    .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+    .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
+    .communication_format = I2S_COMM_FORMAT_STAND_MSB,
+    .dma_buf_count = 4,
+    .dma_buf_len = 160,   // 20 ms @ 8 kHz
+    .use_apll = false,
+    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1
+  };
+  ```
+- [ ] **Pin ADC capture task to core 1** (high priority):
+  ```cpp
+  xTaskCreatePinnedToCore(captureTask, "cap", 4096, nullptr,
+                          configMAX_PRIORITIES-2, nullptr, 1);
+  ```
+- [ ] **Implement producer-consumer ring buffer** (≥120ms capacity)
+- [ ] **Replace busy-wait with DMA** for stable 20ms frames
+
+#### 2.2 Audio Processing Pipeline
+- [ ] **Add DC blocker + soft gain** (HPF implementation)
 - [ ] **Implement 20ms frame production** for WebRTC compatibility
+- [ ] **Add audio level monitoring** (RMS/peak statistics)
+- [ ] **Create test endpoints**:
+  - `/pcm?ms=200` → base64 PCM burst
+  - `/levels` → JSON RMS/peak sliding window
+
+#### 2.3 Performance Validation
+- [ ] **Validate ADC jitter <5%** p95
+- [ ] **Test buffer handling** under WiFi jitter (±20%)
+- [ ] **Measure CPU usage** (<25% on core 1)
+- [ ] **Verify 20ms frame timing** accuracy
+
+### Phase 3: WebRTC Integration (LOW PRIORITY)
+**Status**: Planned but not started
 
 ### Phase 3: WebRTC Integration (LOW PRIORITY)
 **Status**: Planned but not started
 
 #### 3.1 G.711 Audio Encoding
-- [ ] **Implement G.711 u-law/A-law encoder** for ESP32
-- [ ] **Add RTP packetization** for encoded audio
-- [ ] **Test encoder performance** and CPU usage
-- [ ] **Optimize for real-time operation**
+- [ ] **Implement G.711 A-law encoder** for 8kHz PCM
+- [ ] **Add RTP packetization** for 20ms frames
+- [ ] **Test encoder performance** and CPU usage (<30%)
+- [ ] **Optimize for real-time operation** with zero underflows
 
 #### 3.2 WebRTC Transport
 - [ ] **Implement WebRTC peer connection** or lightweight alternative
 - [ ] **Add SDP/ICE negotiation** support
 - [ ] **Create signaling mechanism** (WebSocket-based)
-- [ ] **Handle network transport** with appropriate QoS
+- [ ] **Handle network transport** with DSCP/EF QoS:
+  ```cpp
+  int tos = 0xB8;  // EF (46)
+  setsockopt(sock, IPPROTO_IP, IP_TOS, &tos, sizeof(tos));
+  ```
 
-#### 3.3 Audio Streaming
-- [ ] **Integrate with ADC recorder** for continuous streaming
+#### 3.3 Audio Streaming Pipeline
+- [ ] **Integrate with ADC recorder** for continuous 20ms frames
 - [ ] **Add audio buffering** for network jitter compensation
 - [ ] **Implement stream controls** (start/stop/pause)
-- [ ] **Add audio quality monitoring**
+- [ ] **Add audio quality monitoring** and statistics
+- [ ] **Validate end-to-end latency** ≤250ms p95 on LAN
 
 ## 🔧 Immediate Action Items (Next Sprint)
 
-### High Priority (This Week)
-1. **Apply Review.md optimizations**:
-   - ADC settings and WiFi power save
-   - DC blocker implementation
-   - CPU frequency locking
+### This Week (High Priority - Phase 1 Foundation)
+1. **Apply system stability fixes**:
+   - Disable WiFi power save (`WiFi.setSleep(false); esp_wifi_set_ps(WIFI_PS_NONE);`)
+   - Lock CPU frequency (`esp_pm_configure(...)`)
+   - Add NTP time sync
+   - Install RC anti-alias filter (1kΩ + 39nF) + 0.1µF decoupling
 
-2. **Complete MQTT integration**:
-   - Add PubSubClient dependency
-   - Implement publish on detection
-   - Add configuration UI
+2. **Test boot safety**:
+   - Verify cold boot succeeds 20/20 with KY-038 connected
+   - Consider moving DO from GPIO15 if issues persist
 
-3. **Enhance provisioning UI**:
-   - Add calibration page
-   - Live monitoring interface
-   - Configuration persistence
+3. **Implement advanced debouncing**:
+   - Add configurable T_min_ms, T_quiet_ms parameters
+   - Implement event counting with RMS/peak tracking
 
-### Medium Priority (Next 2 Weeks)
-1. **I2S-ADC DMA implementation** for stable sampling
-2. **Circular buffer system** for continuous capture
-3. **HTTP webhook support** with retry logic
-4. **Comprehensive testing** of all features
+4. **Complete MQTT integration**:
+   - Add PubSubClient with TLS support
+   - Implement QoS 1 publishing with LWT
+   - Define topic structure and JSON schema
+
+5. **Build calibration UI**:
+   - Add live DO state + ADC meters
+   - Implement parameter sliders
+   - Add connectivity test buttons
 
 ### Low Priority (Future)
 1. **WebRTC integration** planning and prototyping
@@ -161,22 +230,29 @@ This project implements a home monitoring device with ESP32, KY-038 sound sensor
 ## 🎯 Success Criteria
 
 ### Phase 1 Success
-- [ ] Reliable sound detection with configurable sensitivity
-- [ ] Working MQTT/webhook notifications
-- [ ] Functional calibration UI
-- [ ] Stable device operation
+- [ ] **Event detection latency ≤150ms p95** (DO edge → MQTT/webhook receive on LAN)
+- [ ] **False positives <1/hour** in quiet room at default thresholds
+- [ ] **Cold boot with sensor attached** passes 20/20 cycles
+- [ ] **WiFi power save disabled** and CPU locked to 240MHz
+- [ ] **NTP time sync** working with accurate timestamps
+- [ ] **RC anti-alias filter** (1kΩ + 39nF) installed
+- [ ] **MQTT/webhook notifications** working with defined JSON schema
+- [ ] **Calibration UI** functional with live monitoring
 
 ### Phase 2 Success
-- [ ] Optimized ADC recording with <5% timing jitter
-- [ ] Continuous audio capture capability
-- [ ] Real-time audio processing
-- [ ] Hardware-optimized performance
+- [ ] **ADC jitter <5% p95** (frame timestamps vs. schedule)
+- [ ] **No buffer overrun** at ±20% WiFi jitter for ≥10 min runs
+- [ ] **CPU usage <25%** on core 1 at 240MHz for capture+HPF
+- [ ] **I2S-ADC DMA** producing stable 20ms frames
+- [ ] **Ring buffer ≥120ms** capacity with producer on core 1
+- [ ] **Test endpoints** working (/pcm, /levels)
 
 ### Phase 3 Success
-- [ ] WebRTC audio streaming working
-- [ ] Low-latency audio transmission
-- [ ] Browser-compatible audio reception
-- [ ] Production-ready streaming solution
+- [ ] **Continuous 20ms frames** with G.711 A-law encoding
+- [ ] **End-to-end audio latency ≤250ms p95** on LAN
+- [ ] **Encoder CPU <30%** with zero underflows over 15 min
+- [ ] **RTP transport** with DSCP/EF QoS settings
+- [ ] **WebRTC signaling** functional
 
 ## 📅 Timeline Estimates
 
