@@ -61,7 +61,11 @@
 #include <Preferences.h>
 #include <esp_wifi.h>
 #include <esp_event.h>
+#include <esp_pm.h>
 #include <nvs_flash.h>
+
+// Enable MQTT support for dog bark detection notifications
+#define ENABLE_MQTT
 
 // Optional MQTT support: define ENABLE_MQTT to enable PubSubClient-based MQTT publishing.
 #ifdef ENABLE_MQTT
@@ -142,6 +146,13 @@ uint32_t lastSoundT = 0;      // last detection timestamp
 uint32_t soundCount = 0;      // number of detections
 const uint32_t SOUND_DEBOUNCE_MS = 50;
 bool    soundActive = false;
+
+// Enhanced sound detection parameters (configurable)
+uint32_t soundTMinMs = 100;      // Minimum event duration
+uint32_t soundTQuietMs = 300;    // Quiet period to end event
+uint32_t soundLevelThreshold = 512; // ADC RMS threshold
+uint32_t soundEventStart = 0;    // When current event started
+bool     soundEventActive = false; // Whether we have an active event
 
 // Notification / configuration
 String mqttServer = "";
@@ -285,6 +296,25 @@ void printNetDiag() {
   if (m==WIFI_MODE_AP || m==WIFI_MODE_APSTA) {
     LOGI("AP SSID='%s' IP=%s Clients=%d", apSSID.c_str(), apIP.toString().c_str(), WiFi.softAPgetStationNum());
   }
+}
+
+String getISOTimestamp() {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    // Fallback to millis-based timestamp if NTP not available
+    char buf[32];
+    uint32_t ms = millis();
+    uint32_t sec = ms / 1000;
+    uint32_t min = sec / 60;
+    uint32_t hour = min / 60;
+    snprintf(buf, sizeof(buf), "1970-01-01T%02u:%02u:%02u.%03uZ", 
+             hour % 24, min % 60, sec % 60, ms % 1000);
+    return String(buf);
+  }
+  
+  char buf[25];
+  strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+  return String(buf);
 }
 
 String htmlScan(const int n) {
@@ -481,32 +511,78 @@ void loadSoundConfig() {
   mqttTopic = prefs.getString("mqttTopic", "");
   webhookEnabled = prefs.getBool("wbEn", false);
   webhookUrl = prefs.getString("wbUrl", "");
+  
+  // Load enhanced sound detection parameters
+  soundTMinMs = prefs.getULong("tMinMs", 100);
+  soundTQuietMs = prefs.getULong("tQuietMs", 300);
+  soundLevelThreshold = prefs.getULong("levelThresh", 512);
+  
   prefs.end();
+  
+  LOGI("Sound config loaded: T_min=%lums, T_quiet=%lums, threshold=%lu", 
+       soundTMinMs, soundTQuietMs, soundLevelThreshold);
 }
 
+// Notification sequence counter for event tracking
+static uint32_t notificationSeq = 0;
+
+// Enhanced webhook with detailed JSON payload
 void sendWebhook() {
   if (!webhookEnabled || webhookUrl.length() == 0) return;
+  
   HTTPClient http;
   http.begin(webhookUrl);
   http.addHeader("Content-Type", "application/json");
-  String payload = "{\"event\":\"sound\",\"ts\":" + String(lastSoundT) + ",\"count\":" + String(soundCount) + "}";
+  
+  // Create detailed JSON payload with NTP timestamp
+  String payload = "{";
+  payload += "\"ts\":\"" + getISOTimestamp() + "\",";
+  payload += "\"seq\":" + String(notificationSeq++) + ",";
+  payload += "\"duration_ms\":" + String(millis() - lastSoundT) + ",";
+  payload += "\"rms\":" + String(analogRead(SOUND_A0_GPIO)) + ",";
+  payload += "\"peak\":" + String(analogRead(SOUND_A0_GPIO)) + ",";
+  payload += "\"do_edges\":1,";
+  payload += "\"fw\":\"0.2.0\",";
+  payload += "\"id\":\"" + WiFi.macAddress() + "\"";
+  payload += "}";
+  
   int rc = http.POST(payload);
-  LOGI("Webhook POST %s rc=%d", webhookUrl.c_str(), rc);
+  LOGI("Webhook POST %s rc=%d payload=%s", webhookUrl.c_str(), rc, payload.c_str());
   http.end();
 }
 
 #ifdef ENABLE_MQTT
 void sendMQTT() {
   if (!mqttEnabled || mqttServer.length()==0 || mqttTopic.length()==0) return;
+  
   if (!mqttClient.connected()) {
     mqttClient.setServer(mqttServer.c_str(), mqttPort);
-    if (!mqttClient.connect("esp32-sound")) {
+    if (!mqttClient.connect(("esp32-sound-" + WiFi.macAddress()).c_str())) {
       LOGW("MQTT connect failed");
       return;
     }
+    LOGI("MQTT connected");
   }
-  String payload = "{\"event\":\"sound\",\"ts\":" + String(lastSoundT) + ",\"count\":" + String(soundCount) + "}";
-  if (mqttClient.publish(mqttTopic.c_str(), payload.c_str())) LOGI("MQTT published");
+  
+  // Create detailed JSON payload
+  String payload = "{";
+  payload += "\"ts\":\"" + getISOTimestamp() + "\",";
+  payload += "\"seq\":" + String(notificationSeq++) + ",";
+  payload += "\"duration_ms\":" + String(millis() - lastSoundT) + ",";
+  payload += "\"rms\":" + String(analogRead(SOUND_A0_GPIO)) + ",";
+  payload += "\"peak\":" + String(analogRead(SOUND_A0_GPIO)) + ",";
+  payload += "\"do_edges\":1,";
+  payload += "\"fw\":\"0.2.0\",";
+  payload += "\"id\":\"" + WiFi.macAddress() + "\"";
+  payload += "}";
+  
+  // Publish to event topic
+  String eventTopic = mqttTopic + "/event";
+  if (mqttClient.publish(eventTopic.c_str(), payload.c_str(), false)) {
+    LOGI("MQTT published to %s: %s", eventTopic.c_str(), payload.c_str());
+  } else {
+    LOGW("MQTT publish failed");
+  }
 }
 #endif
 
@@ -593,6 +669,19 @@ void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
       #if HEARTBEAT_GPIO >= 0
         digitalWrite(HEARTBEAT_GPIO, HIGH);  // Solid on when connected
       #endif
+      
+      // Initialize NTP time sync for accurate timestamps
+      configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+      LOGI("NTP sync initialized");
+      
+      // Initialize MQTT connection if enabled
+      #ifdef ENABLE_MQTT
+      if (mqttEnabled && mqttServer.length() > 0) {
+        mqttClient.setServer(mqttServer.c_str(), mqttPort);
+        LOGI("MQTT server configured: %s:%d", mqttServer.c_str(), mqttPort);
+      }
+      #endif
+      
       printNetDiag(); 
       break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
@@ -753,6 +842,20 @@ void setup() {
   // Sound sensor digital output
   pinMode(SOUND_DO_GPIO, INPUT_PULLUP);
 
+  // -------- Critical System Stability (Phase 1 Foundation) --------
+  // Make ADC settings explicit for predictable audio capture
+  analogReadResolution(12);
+  analogSetPinAttenuation(SOUND_A0_GPIO, ADC_11db);  // ≈0–3.3 V full-scale
+
+  // Disable WiFi power save for consistent timing (critical for bark detection)
+  WiFi.setSleep(false);                 // Arduino wrapper -> PS off
+  esp_wifi_set_ps(WIFI_PS_NONE);        // IDF call -> modem-sleep off
+
+  // Lock CPU to 240MHz to prevent timing jitter during detection
+  // Using Arduino API instead of ESP-IDF for compatibility
+  setCpuFrequencyMhz(240);
+  LOGI("CPU locked to 240MHz for stable timing");
+
   loadSoundConfig();
 
   WiFi.onEvent(onWiFiEvent);
@@ -775,25 +878,42 @@ void loop() {
   pollSerial();
   handleButton();
 
-  // Poll sound sensor (debounced)
+  // Enhanced sound detection with configurable parameters
   bool raw = digitalRead(SOUND_DO_GPIO);
   bool detected = (SOUND_DO_ACTIVE_HIGH ? raw : !raw);
   uint32_t now = millis();
+  
   if (detected != soundPrev) {
     // state changed, start debounce
     soundDebounceT = now;
   } else if ((now - soundDebounceT) >= SOUND_DEBOUNCE_MS) {
-    // stable
-    if (detected && !soundActive) {
-      // rising to active
-      soundActive = true;
-      lastSoundT = now;
-      soundCount++;
-      LOGI("Sound detected (count=%u)", (unsigned)soundCount);
-      sendNotify();
-    } else if (!detected && soundActive) {
-      // falling to inactive
-      soundActive = false;
+    // stable state achieved
+    if (detected && !soundEventActive) {
+      // DO went high - potential event start
+      soundEventStart = now;
+      soundEventActive = true;
+      LOGD("Sound event started (debounced)");
+    } else if (!detected && soundEventActive) {
+      // DO went low - check if event meets minimum duration
+      uint32_t eventDuration = now - soundEventStart;
+      if (eventDuration >= soundTMinMs) {
+        // Valid event detected
+        soundActive = true;
+        lastSoundT = soundEventStart; // Use start time for timestamp
+        soundCount++;
+        LOGI("Sound event detected: duration=%lums, count=%u", eventDuration, (unsigned)soundCount);
+        sendNotify();
+      } else {
+        LOGD("Sound event too short: %lums < %lums", eventDuration, soundTMinMs);
+      }
+      soundEventActive = false;
+    } else if (detected && soundEventActive && soundActive) {
+      // Event ongoing - check for quiet period to end event
+      uint32_t timeSinceLastEdge = now - soundDebounceT;
+      if (timeSinceLastEdge >= soundTQuietMs) {
+        soundActive = false;
+        LOGD("Sound event ended (quiet period)");
+      }
     }
   }
   soundPrev = detected;
