@@ -74,11 +74,15 @@ WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 #endif
 #include <HTTPClient.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
 
 // Forward declarations
 void loadSoundConfig();
 void pollSerial();
 void handleButton();
+void notificationTask(void *pv);
 
 #define CONNECT_TIMEOUT_MS 15000
 #define RETRY_CONNECT_MS    5000
@@ -161,6 +165,16 @@ String mqttTopic = "";
 bool mqttEnabled = false;
 String webhookUrl = "";
 bool webhookEnabled = false;
+
+// Notification event queue
+struct NotificationEvent {
+  uint32_t timestamp;     // event start timestamp (ms)
+  uint32_t duration_ms;   // event duration
+  uint32_t rms;           // sampled RMS level
+  uint32_t peak;          // sampled peak level
+};
+
+static QueueHandle_t notifyQueue = nullptr;
 
 // ADC recorder configuration
 #define SOUND_A0_GPIO 34   // default ADC pin for KY-038 A0 (ADC1_CH6). Change as needed.
@@ -527,34 +541,34 @@ void loadSoundConfig() {
 static uint32_t notificationSeq = 0;
 
 // Enhanced webhook with detailed JSON payload
-void sendWebhook() {
+void sendWebhook(const NotificationEvent &evt) {
   if (!webhookEnabled || webhookUrl.length() == 0) return;
-  
+
   HTTPClient http;
   http.begin(webhookUrl);
   http.addHeader("Content-Type", "application/json");
-  
+
   // Create detailed JSON payload with NTP timestamp
   String payload = "{";
   payload += "\"ts\":\"" + getISOTimestamp() + "\",";
   payload += "\"seq\":" + String(notificationSeq++) + ",";
-  payload += "\"duration_ms\":" + String(millis() - lastSoundT) + ",";
-  payload += "\"rms\":" + String(analogRead(SOUND_A0_GPIO)) + ",";
-  payload += "\"peak\":" + String(analogRead(SOUND_A0_GPIO)) + ",";
+  payload += "\"duration_ms\":" + String(evt.duration_ms) + ",";
+  payload += "\"rms\":" + String(evt.rms) + ",";
+  payload += "\"peak\":" + String(evt.peak) + ",";
   payload += "\"do_edges\":1,";
   payload += "\"fw\":\"0.2.0\",";
   payload += "\"id\":\"" + WiFi.macAddress() + "\"";
   payload += "}";
-  
+
   int rc = http.POST(payload);
   LOGI("Webhook POST %s rc=%d payload=%s", webhookUrl.c_str(), rc, payload.c_str());
   http.end();
 }
 
 #ifdef ENABLE_MQTT
-void sendMQTT() {
+void sendMQTT(const NotificationEvent &evt) {
   if (!mqttEnabled || mqttServer.length()==0 || mqttTopic.length()==0) return;
-  
+
   if (!mqttClient.connected()) {
     mqttClient.setServer(mqttServer.c_str(), mqttPort);
     if (!mqttClient.connect(("esp32-sound-" + WiFi.macAddress()).c_str())) {
@@ -563,19 +577,19 @@ void sendMQTT() {
     }
     LOGI("MQTT connected");
   }
-  
+
   // Create detailed JSON payload
   String payload = "{";
   payload += "\"ts\":\"" + getISOTimestamp() + "\",";
   payload += "\"seq\":" + String(notificationSeq++) + ",";
-  payload += "\"duration_ms\":" + String(millis() - lastSoundT) + ",";
-  payload += "\"rms\":" + String(analogRead(SOUND_A0_GPIO)) + ",";
-  payload += "\"peak\":" + String(analogRead(SOUND_A0_GPIO)) + ",";
+  payload += "\"duration_ms\":" + String(evt.duration_ms) + ",";
+  payload += "\"rms\":" + String(evt.rms) + ",";
+  payload += "\"peak\":" + String(evt.peak) + ",";
   payload += "\"do_edges\":1,";
   payload += "\"fw\":\"0.2.0\",";
   payload += "\"id\":\"" + WiFi.macAddress() + "\"";
   payload += "}";
-  
+
   // Publish to event topic
   String eventTopic = mqttTopic + "/event";
   if (mqttClient.publish(eventTopic.c_str(), payload.c_str(), false)) {
@@ -586,12 +600,21 @@ void sendMQTT() {
 }
 #endif
 
-void sendNotify() {
-  // non-blocking considerations: HTTPClient is blocking; keep payload minimal
-  sendWebhook();
+void sendNotify(const NotificationEvent &evt) {
+  sendWebhook(evt);
 #ifdef ENABLE_MQTT
-  sendMQTT();
+  sendMQTT(evt);
 #endif
+}
+
+// Task to process notification queue
+void notificationTask(void *pv) {
+  NotificationEvent evt;
+  while (true) {
+    if (xQueueReceive(notifyQueue, &evt, portMAX_DELAY) == pdTRUE) {
+      sendNotify(evt);
+    }
+  }
 }
 
 void startCaptiveAP() {
@@ -863,6 +886,13 @@ void setup() {
 
   bindRoutes();
 
+  notifyQueue = xQueueCreate(8, sizeof(NotificationEvent));
+  if (!notifyQueue) {
+    LOGE("Failed to create notification queue");
+  } else {
+    xTaskCreate(notificationTask, "notifyTask", 4096, NULL, 1, NULL);
+  }
+
   if (tryConnectFromPrefs(CONNECT_TIMEOUT_MS)) {
     // STA path
     LOGI("Starting in STA mode");
@@ -902,7 +932,14 @@ void loop() {
         lastSoundT = soundEventStart; // Use start time for timestamp
         soundCount++;
         LOGI("Sound event detected: duration=%lums, count=%u", eventDuration, (unsigned)soundCount);
-        sendNotify();
+        NotificationEvent evt;
+        evt.timestamp = soundEventStart;
+        evt.duration_ms = eventDuration;
+        evt.rms = analogRead(SOUND_A0_GPIO);
+        evt.peak = evt.rms;
+        if (notifyQueue && xQueueSend(notifyQueue, &evt, 0) != pdTRUE) {
+          LOGW("Notification queue full");
+        }
       } else {
         LOGD("Sound event too short: %lums < %lums", eventDuration, soundTMinMs);
       }
