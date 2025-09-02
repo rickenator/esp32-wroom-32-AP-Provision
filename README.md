@@ -1,5 +1,4 @@
-# esp32-wroom-32-AP-Provision
-
+# ESP32 Home Monitoring Device - Dog Bark Detector
 Feature branch: feature-webrtc
 
 This repository demonstrates a captive-portal provisioning flow for ESP32 devices and a planned extension on the `feature-webrtc` branch to capture microphone audio and stream it via WebRTC.
