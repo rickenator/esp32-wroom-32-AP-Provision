@@ -1,0 +1,62 @@
+# PlatformIO
+.pio/
+.pioenvs/
+.pioenvs*/
+.piolibdeps/
+.piolibdeps*/
+.pio/build/
+.pio/build*/
+.pio/libdeps/
+.pio/libdeps*/
+.pio/platforms/
+.pio/packages/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git
+.mypy_cache
+.pytest_cache
+.hypothesis
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ESP32 / Arduino
+*.bin
+*.elf
+*.map
+*.hex
+*.eep
+*.lss
+
+# Temporary files
+*.tmp
+*.temp
+*~
