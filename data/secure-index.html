@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Secure Audio Monitor</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            text-align: center;
+            color: #4a5568;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+        }
+
+        .security-badge {
+            display: inline-block;
+            background: linear-gradient(45deg, #48bb78, #38a169);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .login-section, .main-section {
+            margin-bottom: 30px;
+        }
+
+        .login-section {
+            text-align: center;
+            padding: 30px;
+            background: #f7fafc;
+            border-radius: 10px;
+            border: 2px solid #e2e8f0;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus, input[type="password"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: transform 0.2s;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-danger {
+            background: linear-gradient(45deg, #e53e3e, #c53030);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .status-card {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #e2e8f0;
+            text-align: center;
+        }
+
+        .status-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .status-label {
+            color: #718096;
+            font-size: 0.9em;
+        }
+
+        .audio-controls {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #f0fff4;
+            border: 1px solid #c6f6d5;
+            color: #22543d;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            border: 1px solid #feb2b2;
+            color: #742a2a;
+        }
+
+        .alert-warning {
+            background: #fefcbf;
+            border: 1px solid #faf089;
+            color: #744210;
+        }
+
+        .security-info {
+            background: #ebf8ff;
+            border: 2px solid #90cdf4;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .security-info h3 {
+            color: #2b6cb0;
+            margin-top: 0;
+        }
+
+        .security-features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .security-feature {
+            display: flex;
+            align-items: center;
+            color: #2d3748;
+        }
+
+        .security-feature::before {
+            content: "🔒";
+            margin-right: 8px;
+            font-size: 1.2em;
+        }
+
+        .live-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background: #48bb78;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 ESP32 Secure Audio Monitor <span class="security-badge">SECURED</span></h1>
+        
+        <!-- Security Information -->
+        <div class="security-info">
+            <h3>🛡️ Security Features Active</h3>
+            <div class="security-features">
+                <div class="security-feature">HTTPS/TLS</div>
+                <div class="security-feature">JWT Authentication</div>
+                <div class="security-feature">Rate Limiting</div>
+                <div class="security-feature">SRTP Encryption</div>
+                <div class="security-feature">Audit Logging</div>
+                <div class="security-feature">Brute Force Protection</div>
+            </div>
+        </div>
+
+        <!-- Login Section -->
+        <div id="loginSection" class="login-section">
+            <h2>🔐 Secure Authentication Required</h2>
+            <div id="alertContainer"></div>
+            
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" placeholder="Enter username" value="admin">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" placeholder="Enter password">
+            </div>
+            
+            <button class="btn" onclick="login()">🔑 Login</button>
+            
+            <div style="margin-top: 20px; font-size: 0.9em; color: #718096;">
+                <p><strong>Default Credentials:</strong> Check serial console for initial admin password</p>
+                <p><strong>Security:</strong> Password must be 12+ characters with mixed case, numbers, and symbols</p>
+            </div>
+        </div>
+
+        <!-- Main Section (hidden until authenticated) -->
+        <div id="mainSection" class="main-section hidden">
+            <div id="mainAlertContainer"></div>
+            
+            <!-- Device Status -->
+            <div class="status-grid">
+                <div class="status-card">
+                    <div class="status-value" id="statusConnection">
+                        <span class="live-indicator"></span>Connected
+                    </div>
+                    <div class="status-label">Connection Status</div>
+                </div>
+                
+                <div class="status-card">
+                    <div class="status-value" id="statusStreams">0</div>
+                    <div class="status-label">Active Streams</div>
+                </div>
+                
+                <div class="status-card">
+                    <div class="status-value" id="statusUptime">0s</div>
+                    <div class="status-label">Uptime</div>
+                </div>
+                
+                <div class="status-card">
+                    <div class="status-value" id="statusMemory">0KB</div>
+                    <div class="status-label">Free Memory</div>
+                </div>
+            </div>
+
+            <!-- Audio Controls -->
+            <div class="audio-controls">
+                <h3>🎵 Audio Stream Controls</h3>
+                <button class="btn" id="startStreamBtn" onclick="startStream()">
+                    ▶️ Start Secure Stream
+                </button>
+                <button class="btn btn-danger" id="stopStreamBtn" onclick="stopStream()" disabled>
+                    ⏹️ Stop Stream
+                </button>
+            </div>
+
+            <!-- Stream Information -->
+            <div id="streamInfo" class="hidden">
+                <div class="status-card">
+                    <h4>📡 Stream Configuration</h4>
+                    <p><strong>Session ID:</strong> <span id="sessionId">-</span></p>
+                    <p><strong>RTP Port:</strong> <span id="rtpPort">-</span></p>
+                    <p><strong>Sample Rate:</strong> <span id="sampleRate">-</span> Hz</p>
+                    <p><strong>Codec:</strong> <span id="codec">-</span></p>
+                    <p><strong>Encryption:</strong> <span style="color: #48bb78;">🔐 SRTP Enabled</span></p>
+                </div>
+            </div>
+
+            <!-- Logout -->
+            <div style="text-align: center; margin-top: 30px;">
+                <button class="btn btn-danger" onclick="logout()">🚪 Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let authToken = null;
+        let currentSessionId = null;
+        let statusInterval = null;
+
+        // Check if already authenticated on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            authToken = localStorage.getItem('authToken');
+            if (authToken) {
+                // Validate token by trying to fetch status
+                fetchDeviceStatus().then(success => {
+                    if (success) {
+                        showMainSection();
+                    } else {
+                        logout(); // Token invalid
+                    }
+                });
+            }
+        });
+
+        function showAlert(message, type = 'error', container = 'alertContainer') {
+            const alertDiv = document.getElementById(container);
+            alertDiv.innerHTML = `
+                <div class="alert alert-${type}">
+                    ${message}
+                </div>
+            `;
+            
+            // Auto-hide success messages
+            if (type === 'success') {
+                setTimeout(() => {
+                    alertDiv.innerHTML = '';
+                }, 5000);
+            }
+        }
+
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            if (!username || !password) {
+                showAlert('Please enter both username and password');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    authToken = data.token;
+                    localStorage.setItem('authToken', authToken);
+                    
+                    showAlert('Authentication successful!', 'success');
+                    setTimeout(() => {
+                        showMainSection();
+                    }, 1000);
+                } else {
+                    showAlert(data.error || 'Authentication failed');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showAlert('Network error during authentication');
+            }
+        }
+
+        function logout() {
+            authToken = null;
+            currentSessionId = null;
+            localStorage.removeItem('authToken');
+            
+            if (statusInterval) {
+                clearInterval(statusInterval);
+                statusInterval = null;
+            }
+            
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('mainSection').classList.add('hidden');
+            document.getElementById('alertContainer').innerHTML = '';
+            document.getElementById('mainAlertContainer').innerHTML = '';
+            
+            // Reset form
+            document.getElementById('password').value = '';
+        }
+
+        function showMainSection() {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('mainSection').classList.remove('hidden');
+            
+            // Start status updates
+            fetchDeviceStatus();
+            statusInterval = setInterval(fetchDeviceStatus, 5000);
+        }
+
+        async function fetchDeviceStatus() {
+            try {
+                const response = await fetch('/api/status');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    document.getElementById('statusStreams').textContent = data.active_streams || 0;
+                    document.getElementById('statusUptime').textContent = formatUptime(data.uptime || 0);
+                    document.getElementById('statusMemory').textContent = formatBytes(data.free_heap || 0);
+                    
+                    return true;
+                } else {
+                    return false;
+                }
+            } catch (error) {
+                console.error('Status fetch error:', error);
+                return false;
+            }
+        }
+
+        async function startStream() {
+            if (!authToken) {
+                showAlert('Authentication required', 'error', 'mainAlertContainer');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/start-stream', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentSessionId = data.session_id;
+                    
+                    // Update UI
+                    document.getElementById('startStreamBtn').disabled = true;
+                    document.getElementById('stopStreamBtn').disabled = false;
+                    
+                    // Show stream info
+                    document.getElementById('sessionId').textContent = data.session_id;
+                    document.getElementById('rtpPort').textContent = data.rtp_port;
+                    document.getElementById('sampleRate').textContent = data.sample_rate;
+                    document.getElementById('codec').textContent = data.codec;
+                    document.getElementById('streamInfo').classList.remove('hidden');
+                    
+                    showAlert('🎵 Secure audio stream started successfully!', 'success', 'mainAlertContainer');
+                } else {
+                    showAlert(data.error || 'Failed to start stream', 'error', 'mainAlertContainer');
+                }
+            } catch (error) {
+                console.error('Start stream error:', error);
+                showAlert('Network error starting stream', 'error', 'mainAlertContainer');
+            }
+        }
+
+        async function stopStream() {
+            if (!currentSessionId) return;
+
+            try {
+                const response = await fetch('/api/stop-stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: `session_id=${encodeURIComponent(currentSessionId)}`
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentSessionId = null;
+                    
+                    // Update UI
+                    document.getElementById('startStreamBtn').disabled = false;
+                    document.getElementById('stopStreamBtn').disabled = true;
+                    document.getElementById('streamInfo').classList.add('hidden');
+                    
+                    showAlert('⏹️ Audio stream stopped', 'success', 'mainAlertContainer');
+                } else {
+                    showAlert(data.error || 'Failed to stop stream', 'error', 'mainAlertContainer');
+                }
+            } catch (error) {
+                console.error('Stop stream error:', error);
+                showAlert('Network error stopping stream', 'error', 'mainAlertContainer');
+            }
+        }
+
+        function formatUptime(milliseconds) {
+            const seconds = Math.floor(milliseconds / 1000);
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            
+            if (hours > 0) {
+                return `${hours}h ${minutes}m`;
+            } else if (minutes > 0) {
+                return `${minutes}m ${secs}s`;
+            } else {
+                return `${secs}s`;
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0KB';
+            
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i];
+        }
+
+        // Handle Enter key in login form
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !document.getElementById('loginSection').classList.contains('hidden')) {
+                login();
+            }
+        });
+    </script>
+</body>
+</html>

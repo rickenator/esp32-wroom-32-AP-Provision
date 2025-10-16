@@ -134,13 +134,76 @@ esp32-wroom-32-AP-Provision/
 - `net` - WiFi credentials (SSID, password)
 - `sound` - Sound sensor configuration (MQTT settings, webhook URL)
 
+## 🚀 **Quick Start Guide**
+
+### **Development Flow**
+1. **Hardware Setup**: Connect INMP441 to ESP32 using [WIRING-INMP441.md](WIRING-INMP441.md)
+2. **Test Hardware**: `./switch-firmware.sh inmp441-test` → Upload → Verify I2S audio
+3. **Development**: `./switch-firmware.sh webrtc` → Upload → Test basic functionality  
+4. **Production**: `./switch-firmware.sh secure` → Upload → **Full security enabled**
+5. **External Access**: Configure router using [ROUTER-CONFIGURATION.md](ROUTER-CONFIGURATION.md)
+
+### **Firmware Variants**
+- **`inmp441-test`** - Hardware validation and I2S testing
+- **`webrtc`** - Basic WebRTC streaming (development)
+- **`secure`** - Production-ready with comprehensive security
+- **`main/legacy`** - Original KY-038 analog sensor firmware
+
 ## Current Features (feature-webrtc-INMP441 branch)
 
-- **I2S Audio Capture**: High-quality digital audio from INMP441 microphone
-- **Real-time Audio Processing**: Continuous audio capture with ring buffer
-- **WebRTC Integration**: Audio streaming with G.711 encoding and RTP transport
-- **Audio Monitoring**: Live audio level meters and quality metrics
+### **Core Audio System**
+- **I2S Audio Capture**: High-quality digital audio from INMP441 microphone  
+- **Real-time Processing**: Continuous capture with ring buffer (2-second capacity)
+- **WebRTC Integration**: G.711 A-law encoding and RTP transport
+- **Audio Monitoring**: Live level meters and quality metrics
+
+### **Security Features** (Secure Firmware)
+- **🔐 HTTPS/TLS**: Self-signed certificates with secure web interface
+- **🛡️ JWT Authentication**: Token-based access control with multi-level authorization
+- **⚡ Rate Limiting**: DDoS protection and brute force prevention
+- **🔒 SRTP Encryption**: Encrypted audio streams for privacy
+- **📊 Security Logging**: Comprehensive audit trail and monitoring
+- **🚫 Access Control**: User management with lockout mechanisms
+
+### **Network & Provisioning**
 - **WiFi Provisioning**: Captive portal for easy network setup
+- **Dynamic DNS Ready**: External access via port forwarding
+- **Multi-Client Support**: Up to 4 concurrent secure audio streams
+
+## 🔐 **Security Implementation**
+
+For **external network access** via port forwarding and dynamic DNS:
+
+### **📚 Security Documentation**
+- **[SECURITY-IMPLEMENTATION.md](SECURITY-IMPLEMENTATION.md)** - Comprehensive security guide with threat model, authentication, encryption, and monitoring
+- **[ROUTER-CONFIGURATION.md](ROUTER-CONFIGURATION.md)** - Step-by-step router setup for secure external access
+- **[THEORY-OF-OPERATIONS.md](THEORY-OF-OPERATIONS.md)** - Complete system architecture and technical details
+
+### **🛡️ Security Features Overview**
+- **Multi-layer Authentication**: JWT tokens, password policies, brute force protection
+- **Transport Encryption**: HTTPS with TLS certificates, SRTP for audio streams  
+- **Network Security**: Rate limiting, IP blocking, audit logging
+- **Access Control**: Role-based permissions (Public/User/Admin/SuperAdmin)
+- **Monitoring**: Real-time security event logging and alerting
+
+### **⚡ Quick Security Setup**
+```bash
+# 1. Deploy secure firmware
+./switch-firmware.sh secure
+pio run --target upload
+
+# 2. Get initial admin password from serial console
+# 3. Configure router port forwarding (443, 5004) 
+# 4. Set up dynamic DNS
+# 5. Access via https://yourdevice.ddns.net
+```
+
+### **🚨 Security Considerations**
+- **Default password is random** - Check serial console on first boot
+- **Self-signed certificates** - Browser will show security warning (expected)
+- **Strong passwords required** - 12+ chars with mixed case, numbers, symbols
+- **Rate limiting active** - 100 requests per minute per IP
+- **Failed login lockout** - 5 attempts = 5 minute lockout
 
 ## Notes
 
@@ -148,6 +211,7 @@ esp32-wroom-32-AP-Provision/
 - `flush-nvs` erases the entire NVS partition - use with caution
 - WebRTC on ESP32 is experimental and may require careful resource tuning
 - Sound sensor polarity can be configured via `SOUND_DO_ACTIVE_HIGH` define
+- **Secure firmware generates random admin password on first boot**
 
 ## Contributing
 

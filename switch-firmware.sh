@@ -25,6 +25,14 @@ elif [ "$1" = "webrtc" ]; then
     echo "✅ Now running WebRTC streaming firmware"
     echo "Run: pio run --target upload"
 
+elif [ "$1" = "secure" ] || [ "$1" = "secure-webrtc" ]; then
+    echo "Switching to SECURE WEBRTC mode..."
+    cp esp32-wroom-32-AP-Provision.cpp webrtc-firmware.cpp 2>/dev/null || true
+    cp secure-webrtc-firmware.cpp esp32-wroom-32-AP-Provision.cpp
+    echo "✅ Now running SECURE WebRTC streaming firmware"
+    echo "⚠️  HTTPS + Authentication + Rate Limiting + SRTP"
+    echo "Run: pio run --target upload"
+
 elif [ "$1" = "main" ] || [ "$1" = "legacy" ]; then
     echo "Switching to LEGACY KY-038 firmware..."
     cp esp32-wroom-32-AP-Provision.cpp backup-firmware.cpp 2>/dev/null || true
@@ -33,17 +41,20 @@ elif [ "$1" = "main" ] || [ "$1" = "legacy" ]; then
     echo "Run: pio run --target upload"
 
 else
-    echo "Usage: $0 [ky038-test|inmp441-test|webrtc|main|legacy]"
+    echo "Usage: $0 [ky038-test|inmp441-test|webrtc|secure|main|legacy]"
     echo ""
     echo "Firmware variants:"
     echo "  ky038-test   - KY-038 analog microphone hardware test"
     echo "  inmp441-test - INMP441 I2S digital microphone test" 
-    echo "  webrtc       - WebRTC streaming with INMP441 (MAIN TARGET)"
+    echo "  webrtc       - WebRTC streaming with INMP441"
+    echo "  secure       - SECURE WebRTC with HTTPS/Auth/SRTP (PRODUCTION)"
     echo "  main/legacy  - Legacy KY-038 dog bark detector"
     echo ""
     echo "Current files:"
     ls -la *.cpp 2>/dev/null | head -10
     echo ""
-    echo "Recommended: Use 'inmp441-test' first to verify hardware,"
-    echo "             then 'webrtc' for full WebRTC functionality"
+    echo "Development flow:"
+    echo "  1. 'inmp441-test' - Verify INMP441 hardware setup"
+    echo "  2. 'webrtc'       - Test basic WebRTC functionality"  
+    echo "  3. 'secure'       - Production-ready with full security"
 fi
