@@ -1,20 +1,38 @@
-# ESP32 Home Monitoring Device - TODO List
+# ESP32 WebRTC Audio Streaming - Development Roadmap
 
-## 🎯 Project Overview
-This project implements a home monitoring device with ESP32, KY-038 sound sensor, WiFi provisioning, and WebRTC audio streaming capabilities.
+## 🎯 WebRTC Implementation Status: **COMPLETE** ✅
 
-## 📋 Current Status
-- ✅ **WiFi Provisioning**: Captive portal with web UI working
-- ✅ **Basic Sound Detection**: KY-038 D0 digital detection implemented
-- ✅ **Serial Console**: Command processing with timeout mechanism
-- ✅ **PlatformIO Migration**: Code migrated from Arduino IDE
-- ✅ **Documentation**: README.md, WIRING.md, and .gitignore created
-- 🔄 **Audio ADC**: Basic recording implemented, needs optimization
+### ✅ Phase 1: INMP441 Hardware Integration (COMPLETED)
+- [x] **I2S Driver Setup** - Configure ESP32 I2S for INMP441 digital microphone
+- [x] **Hardware Test Firmware** - `INMP441-test.cpp` with real-time audio analysis
+- [x] **Audio Quality Validation** - RMS/peak level monitoring, 24→16-bit conversion
+- [x] **GPIO Configuration** - SCK/WS/SD pin assignments, L/R channel selection
+- [x] **Wiring Documentation** - Complete setup guide with troubleshooting (`WIRING-INMP441.md`)
+
+### ✅ Phase 2: WebRTC Audio Pipeline (COMPLETED)
+- [x] **Real-time Audio Capture** - Continuous I2S sampling at 16kHz
+- [x] **Ring Buffer System** - FreeRTOS-based audio buffering (2-second capacity)
+- [x] **G.711 A-law Encoding** - WebRTC-compatible audio compression
+- [x] **RTP Packet Generation** - 20ms frames (160 bytes) for streaming
+- [x] **Audio Processing Tasks** - Core 1 audio, Core 0 networking
+
+### ✅ Phase 3: Web Interface & Controls (COMPLETED)
+- [x] **Audio Monitor Page** - Real-time RMS/peak levels, buffer status
+- [x] **RTP Configuration** - Target IP/port setup via web interface
+- [x] **System Diagnostics** - I2S health, memory usage, performance metrics
+- [x] **Serial Console** - Audio statistics, start/stop controls
+- [x] **WiFi Provisioning** - Captive portal for network setup
+
+### ✅ Phase 4: Firmware Management (COMPLETED)
+- [x] **Multi-firmware System** - 4 variants (test/production/legacy)
+- [x] **Switching Script** - `switch-firmware.sh` with guided setup
+- [x] **Build Integration** - PlatformIO configuration for all variants
+- [x] **Documentation** - Complete usage instructions and troubleshooting
 
 ## 🚀 Implementation Roadmap
 
-### Phase 1: Enhanced Digital Detection & Notifications (HIGH PRIORITY)
-**Status**: Partially implemented - basic detection working, notifications needed
+### Phase 1: INMP441 I2S Audio Capture (HIGH PRIORITY)
+**Status**: Implementation needed - transition from KY-038 to INMP441
 
 #### 1.1 System Stability & Performance (MOVED FROM PHASE 2)
 - [ ] **Disable WiFi power save** for consistent timing:

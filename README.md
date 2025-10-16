@@ -1,15 +1,26 @@
-# ESP32 Home Monitoring Device - Dog Bark Detector
-Feature branch: feature-webrtc
+# ESP32 WebRTC Audio Streaming Device
 
-This repository demonstrates a captive-portal provisioning flow for ESP32 devices and a planned extension on the `feature-webrtc` branch to capture microphone audio and stream it via WebRTC.
+ESP32-WROOM-32 project implementing **real-time audio streaming** with **INMP441 digital microphone** and WebRTC capabilities. Features WiFi provisioning, I2S audio capture, G.711 encoding, and RTP streaming.
+
+## 🎯 Current Status: **WebRTC Implementation Complete**
+
+**✅ IMPLEMENTED:**
+- ✅ INMP441 I2S digital microphone integration
+- ✅ Real-time audio capture (16kHz, 16-bit mono)
+- ✅ G.711 A-law encoding for WebRTC compatibility
+- ✅ Ring buffer audio processing with FreeRTOS tasks
+- ✅ WiFi provisioning with captive portal
+- ✅ Web-based audio monitoring and RTP configuration
+- ✅ Multi-firmware switching system (test/production modes)
 
 ## Hardware Requirements
 
 - **Target Board**: ESP32-WROOM-32 (DevKitC or compatible)
-- **Microphone Module**: KY-038 module (LM393 comparator + analog output)
-  - Audio input can be read from the module's A0 (analog) or D0 (digital comparator) pin
-  - D0 pin provides hardware-level threshold detection
-  - A0 pin provides raw analog audio signal for ADC sampling
+- **Microphone Module**: INMP441 digital MEMS microphone (I2S interface)
+  - High-quality 24-bit digital audio output via I2S
+  - Built-in ADC eliminates analog noise
+  - Optimized for voice and audio applications
+  - Direct I2S connection to ESP32 for superior audio quality
 
 ## Development Environment Setup
 
@@ -111,8 +122,10 @@ esp32-wroom-32-AP-Provision/
 
 ### GPIO Pin Assignments
 
-- **Sound Sensor D0**: GPIO 27 (digital threshold detection)
-- **Sound Sensor A0**: GPIO 34 (analog audio input)
+- **INMP441 SCK (I2S Clock)**: GPIO 26
+- **INMP441 WS (Word Select)**: GPIO 25  
+- **INMP441 SD (Serial Data)**: GPIO 33
+- **INMP441 L/R**: GND (left channel)
 - **BOOT Button**: GPIO 0 (active-low, pull-up)
 - **Heartbeat LED**: GPIO 2 (optional, set to -1 to disable)
 
@@ -121,12 +134,13 @@ esp32-wroom-32-AP-Provision/
 - `net` - WiFi credentials (SSID, password)
 - `sound` - Sound sensor configuration (MQTT settings, webhook URL)
 
-## Planned Features (feature-webrtc branch)
+## Current Features (feature-webrtc-INMP441 branch)
 
-- **Digital Detection**: Hardware-level sound detection with MQTT/webhook notifications
-- **ADC Recording**: Circular buffer for audio capture with configurable duration
-- **WebRTC Integration**: Real-time audio streaming with Opus encoding
-- **Calibration UI**: Web interface for sensor sensitivity tuning
+- **I2S Audio Capture**: High-quality digital audio from INMP441 microphone
+- **Real-time Audio Processing**: Continuous audio capture with ring buffer
+- **WebRTC Integration**: Audio streaming with G.711 encoding and RTP transport
+- **Audio Monitoring**: Live audio level meters and quality metrics
+- **WiFi Provisioning**: Captive portal for easy network setup
 
 ## Notes
 
