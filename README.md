@@ -4,7 +4,9 @@ This is the **bare bones** WiFi provisioning code for ESP32, providing a minimal
 
 ## 🎯 **What This Provides**
 
-This implementation offers:
+This branch offers **two implementation options**:
+
+### 📋 **Option 1: Simple Polling Version** (`AP-Provision.ino`)
 - **WiFi Provisioning** via captive portal (connects automatically when you join the AP)
 - **Web-based configuration** with a clean, mobile-friendly interface
 - **Persistent credential storage** using ESP32 NVS (Non-Volatile Storage)
@@ -12,6 +14,15 @@ This implementation offers:
 - **Serial console commands** for debugging and configuration
 - **Hardware button controls** for reprovisioning and factory reset
 - **Automatic reconnection** with configurable retry logic
+
+### ⚡ **Option 2: Enhanced FreeRTOS Version** (`barebones-freertos.cpp`)
+- **All features from Option 1** plus advanced capabilities:
+- **Interrupt-driven button handling** - never miss button presses
+- **Non-blocking serial processing** with command timeout
+- **Task-based architecture** - better separation of concerns and real-time performance
+- **FreeRTOS task monitoring** via web interface (`/tasks` endpoint)
+- **Mutex-protected WiFi operations** for thread safety
+- **Foundation for sensor integration** - easy to add dedicated processing tasks
 
 ## 🚀 **Quick Start Guide**
 
@@ -48,13 +59,23 @@ This implementation offers:
    # Open folder in VS Code with PlatformIO
    ```
 
-### Step 3: Upload the Code
+### Step 3: Choose Your Implementation
 
-#### Arduino IDE Method:
+#### Simple Version (Recommended for beginners)
+**Arduino IDE Method:**
 1. **Open the sketch:** File → Open → `AP-Provision.ino`
 2. **Verify compilation:** Click the checkmark (✓) button
 3. **Upload to ESP32:** Click the arrow (→) button
 4. **Open Serial Monitor:** Tools → Serial Monitor (set to 115200 baud)
+
+#### Enhanced FreeRTOS Version (Advanced users)
+**Arduino IDE Method:**
+1. **Copy the enhanced code:** Copy contents of `barebones-freertos.cpp`
+2. **Create new sketch:** File → New, paste the code
+3. **Save as:** `Enhanced-Provisioning.ino`
+4. **Compile and upload** as above
+
+**Note:** The enhanced version requires more memory (~80KB vs ~50KB) but provides better real-time performance and easier expansion for sensor integration.
 
 #### PlatformIO Method:
 ```bash
@@ -90,28 +111,10 @@ pio device monitor
 
 ## 🔧 **Features & Controls**
 
-### Serial Console Commands (115200 baud)
-Connect via serial monitor and use these commands:
-
-```
-help       - Show all available commands
-status     - Print current WiFi/network status  
-clear-net  - Clear saved WiFi credentials only
-flush-nvs  - Erase entire NVS partition (factory reset)
-reprov     - Clear credentials and restart provisioning
-reboot     - Restart the ESP32
-```
-
 ### Hardware Button Controls (GPIO 0 - BOOT button)
 - **Short press** (0.5-3 seconds): Start provisioning AP (keeps other settings)
 - **Long press** (3-6 seconds): Clear WiFi + start provisioning  
 - **Very long press** (6+ seconds): Factory reset + reboot
-
-### Web Interface Pages
-- **`/`** - Main provisioning page with WiFi setup form
-- **`/scan`** - Scan and display nearby WiFi networks
-- **`/diag`** - System diagnostics (uptime, memory, WiFi status)
-- **`/status`** - Connection status after submitting credentials
 
 ### Status LED (GPIO 2)
 - **Blinking** - Device is in provisioning mode or attempting connection
@@ -164,30 +167,76 @@ IPAddress apIP(192,168,4,1), netMsk(255,255,255,0);  // AP network settings
 2. **Reduce log level:** Change `LOG_LEVEL` from `DEBUG` to `INFO` in code
 3. **Factory reset:** Use very long button press or `flush-nvs` command
 
-## 🔧 **Advanced Options**
+## 🔧 **Choosing the Right Version**
 
-### FreeRTOS Interrupt-Based Version
-If you need more advanced features like:
-- **Interrupt-driven button handling** (vs. polling)
-- **Non-blocking serial processing** with timeouts
-- **Task-based architecture** for better real-time performance
-- **Sensor integration** with dedicated processing tasks
+### When to Use Simple Version (`AP-Provision.ino`)
+✅ **Best for:**
+- Learning ESP32 WiFi provisioning concepts
+- Simple IoT projects with basic sensor integration
+- Battery-powered devices (lower memory usage)
+- Projects where code simplicity is paramount
+- Quick prototyping and educational purposes
 
-Consider using the **enhanced FreeRTOS version** available in other feature branches:
-- `feature-webrtc-INMP441` - WebRTC audio streaming with INMP441 microphone
-- `feature-webrtc` - Advanced audio processing with KY-038 sensor
+❌ **Limitations:**
+- Button presses can be missed during WiFi operations
+- Serial commands may timeout during blocking operations
+- Less suitable for real-time applications
+- Single-threaded execution
 
-The enhanced versions include:
-- FreeRTOS task management
-- Interrupt-based button handling with debouncing
-- Advanced serial console with command timeout
-- Audio sensor integration
-- MQTT and webhook support
-- Real-time audio processing
+### When to Use Enhanced Version (`barebones-freertos.cpp`)
+✅ **Best for:**
+- Production IoT devices requiring reliability
+- Projects with multiple sensors or actuators
+- Real-time applications with timing requirements
+- Systems needing concurrent operations
+- Foundation for complex feature additions
 
-**Trade-offs:**
-- **Bare bones version (this branch):** Simple, reliable, easy to understand
-- **Enhanced versions:** More features but increased complexity and memory usage
+❌ **Trade-offs:**
+- Higher memory usage (~30KB more RAM)
+- More complex code structure
+- Requires understanding of FreeRTOS concepts
+- Slightly longer boot time
+
+### Technical Comparison
+| Feature | Simple Version | Enhanced Version |
+|---------|---------------|------------------|
+| **Memory (RAM)** | ~50KB | ~80KB |
+| **Boot Time** | ~2 seconds | ~3 seconds |
+| **Button Response** | Can miss presses | Never misses |
+| **Serial Timeout** | No | Yes (5 seconds) |
+| **Task Monitoring** | No | Yes (/tasks page) |
+| **Thread Safety** | Single thread | Mutex protected |
+| **Expansion Ready** | Manual integration | Task-based |
+| **Code Complexity** | Simple | Moderate |
+
+### Serial Console Commands (115200 baud)
+
+#### Simple Version Commands:
+```
+help       - Show all available commands
+status     - Print current WiFi/network status  
+clear-net  - Clear saved WiFi credentials only
+flush-nvs  - Erase entire NVS partition (factory reset)
+reprov     - Clear credentials and restart provisioning
+reboot     - Restart the ESP32
+```
+
+#### Enhanced Version Additional Commands:
+```
+tasks      - Show FreeRTOS task information and queue status
+(all commands above plus enhanced timeout handling)
+```
+
+### Web Interface Pages
+
+#### Both Versions:
+- **`/`** - Main provisioning page with WiFi setup form
+- **`/scan`** - Scan and display nearby WiFi networks
+- **`/diag`** - System diagnostics (uptime, memory, WiFi status)
+- **`/status`** - Connection status after submitting credentials
+
+#### Enhanced Version Only:
+- **`/tasks`** - FreeRTOS task status, stack usage, and queue monitoring
 
 ### Customization Points
 This bare bones implementation is designed to be easily customized:
@@ -206,9 +255,10 @@ This bare bones implementation is designed to be easily customized:
 ## 📁 **Project Structure**
 ```
 esp32-wroom-32-AP-Provision/
-├── AP-Provision.ino          # Main Arduino sketch (BARE BONES)
-├── README.md                 # This documentation
-└── Review.md                 # Code review and technical notes
+├── AP-Provision.ino          # Simple polling version (RECOMMENDED START)
+├── barebones-freertos.cpp    # Enhanced FreeRTOS version (PRODUCTION READY)
+├── README.md                 # This comprehensive documentation
+└── Review.md                 # Technical code review and analysis
 ```
 
 ## 🔮 **What's Next?**
