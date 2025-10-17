@@ -4,7 +4,7 @@
 
 ## ⚠️ **IMPORTANT: Branch Information**
 
-**📍 You are viewing the `main` branch** which contains the **basic WiFi provisioning sample** with KY-038 analog sensor.
+**📍 You are viewing the `main` branch** which contains the **basic WiFi provisioning sample**
 
 **🚀 For WebRTC audio streaming features, switch to:**
 - **`feature-webrtc-INMP441`** - Complete WebRTC implementation with security
