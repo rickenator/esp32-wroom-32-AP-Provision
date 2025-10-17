@@ -136,12 +136,26 @@ esp32-wroom-32-AP-Provision/
 
 ## 🚀 **Quick Start Guide**
 
-### **Development Flow**
+### **📱 For Mobile/External Access (Most Common)**
+**👉 See [HOWTO.md](HOWTO.md) for complete step-by-step setup guide!**
+
+### **🔧 Development Flow**
 1. **Hardware Setup**: Connect INMP441 to ESP32 using [WIRING-INMP441.md](WIRING-INMP441.md)
 2. **Test Hardware**: `./switch-firmware.sh inmp441-test` → Upload → Verify I2S audio
 3. **Development**: `./switch-firmware.sh webrtc` → Upload → Test basic functionality  
 4. **Production**: `./switch-firmware.sh secure` → Upload → **Full security enabled**
 5. **External Access**: Configure router using [ROUTER-CONFIGURATION.md](ROUTER-CONFIGURATION.md)
+
+### **⚡ Production Quick Deploy**
+```bash
+# Deploy secure firmware
+./switch-firmware.sh secure && pio run --target upload
+
+# Get admin password from serial console, then:
+# 1. Configure router port forwarding (see HOWTO.md)
+# 2. Set up dynamic DNS 
+# 3. Access from anywhere: https://yourdevice.ddns.net
+```
 
 ### **Firmware Variants**
 - **`inmp441-test`** - Hardware validation and I2S testing
@@ -174,9 +188,10 @@ esp32-wroom-32-AP-Provision/
 
 For **external network access** via port forwarding and dynamic DNS:
 
-### **📚 Security Documentation**
-- **[SECURITY-IMPLEMENTATION.md](SECURITY-IMPLEMENTATION.md)** - Comprehensive security guide with threat model, authentication, encryption, and monitoring
-- **[ROUTER-CONFIGURATION.md](ROUTER-CONFIGURATION.md)** - Step-by-step router setup for secure external access
+### **📚 Documentation**
+- **[HOWTO.md](HOWTO.md)** - **⭐ START HERE** - Complete setup guide for mobile/external access
+- **[SECURITY-IMPLEMENTATION.md](SECURITY-IMPLEMENTATION.md)** - Comprehensive security guide with threat model and implementation
+- **[ROUTER-CONFIGURATION.md](ROUTER-CONFIGURATION.md)** - Detailed router setup for secure external access
 - **[THEORY-OF-OPERATIONS.md](THEORY-OF-OPERATIONS.md)** - Complete system architecture and technical details
 
 ### **🛡️ Security Features Overview**
