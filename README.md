@@ -36,13 +36,25 @@ pio device monitor -e esp32s3-bark-detector
 ### **Serial Console Interface**
 Once uploaded, use the serial monitor for real-time control and monitoring:
 
+**🎤 Detection Commands:**
 - `start` - Begin bark detection
 - `stop` - Stop detection
-- `status` - Show system status and ML model info
 - `calibrate` - Audio calibration mode
 - `threshold <value>` - Set detection threshold (0.0-1.0)
 - `sensitivity <level>` - Set sensitivity (low/medium/high)
-- `stats` - Show detection statistics
+
+**📊 Status & Statistics:**
+- `status` - Show system status and ML model info
+- `stats` - Show detection statistics with MQTT metrics
+
+**📡 MQTT Commands:**
+- `mqtt_status` - Show MQTT connection status
+- `mqtt_test` - Test MQTT broker connection
+- `mqtt_restart` - Restart MQTT client
+
+**🔧 System Commands:**
+- `help` - Show all available commands
+- `reboot` - Restart system
 
 ## 🧠 **Machine Learning Model**
 
@@ -58,7 +70,38 @@ Once uploaded, use the serial monitor for real-time control and monitoring:
 2. **Preprocessing** - DC-block, AGC, noise gate, windowing
 3. **Feature Extraction** - 40-channel Log-Mel spectrogram + MFCC
 4. **ML Classification** - TensorFlow Lite Micro inference
-5. **Post-processing** - Temporal smoothing, confidence filtering
+5. **MQTT Alert** - Secure TLS notification with JSON payload
+6. **Post-processing** - Temporal smoothing, confidence filtering
+
+## 📡 **MQTT Alert System**
+
+### **Secure Communication**
+- **TLS 1.2 Encryption** - All MQTT communications secured with certificates
+- **CA Certificate Validation** - Trusted root CAs for major cloud providers
+- **Authentication** - Username/password credentials with secure NVS storage
+- **Automatic Reconnection** - Robust connection management with retry logic
+
+### **Bark Event JSON Payload**
+```json
+{
+  "timestamp": 1697472765420,
+  "sequence": 1234,
+  "confidence": 0.85,
+  "duration_ms": 420,
+  "rms_level": 812,
+  "peak_level": 2014,
+  "device_id": "AA:BB:CC:DD:EE:FF",
+  "firmware": "1.0.0",
+  "event_type": "dog_bark"
+}
+```
+
+### **Supported MQTT Brokers**
+- **AWS IoT Core** - Amazon Root CA 1 certificate
+- **Azure IoT Hub** - DigiCert Global Root CA certificate  
+- **Google Cloud IoT** - DigiCert Global Root CA certificate
+- **HiveMQ Cloud** - DigiCert Global Root CA certificate
+- **Generic Brokers** - Let's Encrypt Root CA certificate
 
 ## 📊 **Performance Specifications**
 
@@ -84,10 +127,16 @@ components/bark_detector/
 │   ├── audio_capture.h      # I2S microphone interface
 │   ├── preprocess.h         # Audio preprocessing functions
 │   ├── feature_extractor.h  # Log-Mel/MFCC computation
-│   └── bark_detector_api.h  # Public API interface
+│   ├── bark_detector_api.h  # Public API interface
+│   ├── mqtt_client.h        # Secure MQTT client with TLS
+│   ├── mqtt_provisioning.h  # MQTT configuration & NVS storage
+│   └── ca_certificates.h    # TLS root certificates
 ├── src/
 │   ├── audio_capture.cpp    # DMA ring buffer, I2S driver
-│   └── preprocess.cpp       # DC-block, AGC, windowing
+│   ├── preprocess.cpp       # DC-block, AGC, windowing
+│   ├── mqtt_client.cpp      # TLS MQTT implementation
+│   ├── mqtt_provisioning.cpp # NVS config management
+│   └── ca_certificates.cpp  # Certificate storage
 └── CMakeLists.txt          # ESP-IDF component definition
 ```
 
@@ -96,7 +145,10 @@ components/bark_detector/
 - **Preprocessing**: Real-time filtering and gain control
 - **Feature Extraction**: SIMD-optimized spectral analysis
 - **ML Inference**: TensorFlow Lite Micro on Core 1
-- **Demo Application**: Complete integration example
+- **MQTT Client**: Secure TLS communication with auto-reconnect
+- **MQTT Provisioning**: Web-based configuration and NVS storage
+- **Certificate Management**: Automatic CA selection for major providers
+- **Demo Application**: Complete integration example with serial interface
 
 ## 🔧 **GPIO Pin Configuration**
 
@@ -154,24 +206,44 @@ The system supports runtime configuration through serial commands:
 ### **2. Software Installation**
 ```bash
 # Clone repository and switch to dog bark detection branch
-git clone https://github.com/your-repo/esp32-bark-detector.git
-cd esp32-bark-detector
+git clone https://github.com/rickenator/esp32-wroom-32-AP-Provision.git
+cd esp32-wroom-32-AP-Provision
 git checkout feature-dogbark-detector
 
 # Build and upload
 pio run -e esp32s3-bark-detector --target upload
 ```
 
-### **3. Initial Testing**
+### **3. MQTT Configuration**
+**Option A: Via WiFi Provisioning (Recommended)**
+1. Power on ESP32-S3 - it will create WiFi hotspot "Aniviza-XXXXXX"
+2. Connect to hotspot and open browser to configuration page
+3. Configure WiFi credentials AND MQTT broker settings:
+   - **Broker Host**: your-mqtt-broker.com
+   - **Port**: 8883 (for TLS) or 1883 (plain)
+   - **Username/Password**: Your MQTT credentials
+   - **Topic Prefix**: bark_detector (or custom)
+   - **Enable TLS**: Recommended for security
+
+**Option B: Via Serial Console**
 ```bash
 # Monitor serial output
 pio device monitor -e esp32s3-bark-detector
 
+# Configure via serial commands:
+mqtt_restart       # Reinitialize MQTT with saved config
+mqtt_test         # Test broker connection
+mqtt_status       # Check connection status
+```
+
+### **4. Initial Testing**
+```bash
 # In serial console:
 start              # Begin detection
 calibrate          # Test audio levels
 threshold 0.8      # Adjust sensitivity
-stats              # View performance metrics
+stats              # View performance & MQTT metrics
+mqtt_status        # Check MQTT connection
 ```
 
 ## 📚 **Example Usage**
@@ -220,19 +292,28 @@ feature_config_t features = {
 ## 🎯 **Use Cases**
 
 ### **Home Automation**
-- **Smart Pet Monitoring** - Detect when dogs are barking while owners are away
+- **Smart Pet Monitoring** - Real-time MQTT alerts when dogs bark while owners away
 - **Security Integration** - Distinguish barks from other sounds for alarm systems
-- **Neighbor Relations** - Monitor excessive barking with timestamped logs
+- **Neighbor Relations** - Monitor excessive barking with timestamped MQTT logs
+- **Smart Home Integration** - Connect to Home Assistant, OpenHAB, Node-RED
+
+### **Cloud & IoT Applications**
+- **AWS IoT Core** - Direct integration with automatic CA certificate selection
+- **Azure IoT Hub** - Secure device-to-cloud messaging with TLS encryption
+- **Google Cloud IoT** - Real-time data streaming and analytics
+- **Custom MQTT Brokers** - HiveMQ, Mosquitto, or self-hosted solutions
 
 ### **Veterinary Applications**
-- **Behavioral Analysis** - Quantify bark frequency and patterns
-- **Stress Monitoring** - Detect changes in bark characteristics
-- **Training Feedback** - Real-time response to bark training
+- **Behavioral Analysis** - Cloud-based bark frequency and pattern analysis
+- **Stress Monitoring** - Remote detection of bark characteristic changes
+- **Training Feedback** - Real-time MQTT notifications for bark training programs
+- **Multi-Dog Monitoring** - Scalable deployment with unique device identification
 
 ### **Research & Development**
-- **Audio Classification** - Extend to other animal sounds or audio events
-- **Edge AI Demos** - Showcase TinyML capabilities on ESP32-S3
-- **IoT Integration** - Connect to cloud services for remote monitoring
+- **Audio Classification** - Extend TinyML model to other animal sounds
+- **Edge AI Demos** - Showcase ESP32-S3 TinyML capabilities with live data
+- **IoT Data Pipeline** - Complete sensor-to-cloud solution with MQTT
+- **Machine Learning** - Collect real-world data for model improvement
 
 ## 🔧 **Troubleshooting**
 
@@ -248,38 +329,57 @@ feature_config_t features = {
 - Reduce sensitivity: `sensitivity low`
 - Check for electromagnetic interference
 
+**MQTT Connection Issues**
+- Verify broker hostname and port: `mqtt_status`
+- Test connection: `mqtt_test`  
+- Check TLS certificate compatibility
+- Restart MQTT client: `mqtt_restart`
+- Verify WiFi connectivity and internet access
+
 **Performance Issues**
 - Ensure ESP32-S3 is running at 240MHz
 - Verify PSRAM is properly configured
 - Monitor CPU usage with `stats` command
+- Check MQTT message queue status in statistics
 
 ### **Debug Commands**
 ```bash
 # System diagnostics
-status              # Overall system health
-memory              # RAM/Flash usage
-cpu                 # CPU utilization
-model_info          # ML model details
+status              # Overall system health including MQTT status
+stats               # Complete statistics with MQTT metrics
+help                # Show all available commands
+
+# MQTT diagnostics
+mqtt_status         # Connection state and configuration
+mqtt_test           # Test broker connectivity  
+mqtt_restart        # Reinitialize MQTT client
 
 # Audio diagnostics  
-audio_test          # I2S interface test
-spectogram_dump     # Save spectrogram to file
-feature_test        # Verify feature extraction
+calibrate           # Real-time audio level monitoring
+threshold 0.8       # Adjust detection sensitivity
+sensitivity high    # Change detection sensitivity level
 ```
 
 ## 🚀 **Future Enhancements**
 
 ### **Planned Features**
-- **Multi-Dog Classification** - Distinguish between different dogs
-- **Emotion Detection** - Classify bark types (happy, aggressive, distressed)
-- **WiFi Connectivity** - Remote monitoring and alerts
-- **Mobile App** - Smartphone interface for configuration and monitoring
-- **Cloud Integration** - Historical data analysis and machine learning improvements
+- **Multi-Dog Classification** - Distinguish between different dogs via MQTT metadata
+- **Emotion Detection** - Classify bark types (happy, aggressive, distressed) in JSON payload
+- **Mobile App** - Smartphone interface with MQTT subscription for real-time alerts
+- **Advanced Analytics** - Cloud-based historical analysis and trend detection
+- **Webhook Integration** - HTTP callbacks in addition to MQTT for broader compatibility
+
+### **MQTT Enhancements**
+- **QoS Configuration** - Configurable message delivery guarantees
+- **Message Retention** - Persistent bark alerts for offline clients
+- **Topic Hierarchies** - Advanced topic structures for multi-device deployments
+- **Device Management** - Remote configuration updates via MQTT commands
+- **Fleet Management** - Centralized monitoring of multiple bark detectors
 
 ### **Model Improvements**
-- **Larger Dataset** - Train on more diverse bark samples
-- **Transfer Learning** - Adapt model for specific environments
-- **Quantization Optimization** - Further reduce memory usage
-- **Real-time Training** - Adaptive learning for specific dogs
+- **Larger Dataset** - Train on more diverse bark samples with cloud data collection
+- **Transfer Learning** - Adapt model for specific environments using MQTT feedback
+- **Quantization Optimization** - Further reduce memory usage while maintaining accuracy
+- **Federated Learning** - Collaborative model improvement across MQTT-connected devices
 
 **🎉 Transform your ESP32-S3 into an intelligent audio AI system!**

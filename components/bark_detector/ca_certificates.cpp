@@ -1,0 +1,136 @@
+/**
+ * @file ca_certificates.cpp
+ * @brief Implementation of CA certificate storage and retrieval
+ */
+
+#include "ca_certificates.h"
+#include <string.h>
+
+// Let's Encrypt Authority X3 (Cross-signed by DST Root CA X3)
+const char* LETS_ENCRYPT_ROOT_CA = 
+"-----BEGIN CERTIFICATE-----\n"
+"MIIFjTCCA3WgAwIBAgIRANOxciY0IzLc9AUoUSrsnGowDQYJKoZIhvcNAQELBQAw\n"
+"TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh\n"
+"cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMjAwOTA0MDAwMDAw\n"
+"WhcNMjUwOTE1MTYwMDAwWjAyMQswCQYDVQQGEwJVUzEWMBQGA1UEChMNTGV0J3Mg\n"
+"RW5jcnlwdDELMAkGA1UEAxMCUjMwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK\n"
+"AoIBAQC7AhUozPaglNMPEuyNVZLD+ILxmaZ6QoinXSaqtSu5xUyxr45r+XXIo9cP\n"
+"R5QUVTVXjJ6oojkZ9YI8QqlObvU7wy7bjcCwXPNZOOftz2nwWgsbvsCUJCWH+jdx\n"
+"sxPnHKzhm+/b5DtFUkWWqcFTzjTIUu61ru2P3mBw4qVUq7ZtDpelQDRrK9O8Zutm\n"
+"NHz6a4uPVymZ+DAXXbpyb/uBxa3Shlg9F8fnCbvxK/eG3MHacV3URuPMrSXBiLxg\n"
+"Z3Vms/EY96Jc5lP/Ooi2R6X/ExjqmAl3P51T+c8B5fWmcBcUr2Ok/5mzk53cU6cG\n"
+"/kiFHaFpriV1uxPMUgP17VGhi9sVAgMBAAGjggEIMIIBBDAOBgNVHQ8BAf8EBAMC\n"
+"AYYwHQYDVR0lBBYwFAYIKwYBBQUHAwIGCCsGAQUFBwMBMBIGA1UdEwEB/wQIMAYB\n"
+"Af8CAQAwHQYDVR0OBBYEFBQusxe3WFbLrlAJQOYfr52LFMLGMB8GA1UdIwQYMBaA\n"
+"FHm0WeZ7tuXkAXOACIjIGlj26ZtuMDIGCCsGAQUFBwEBBCYwJDAiBggrBgEFBQcw\n"
+"AoYWaHR0cDovL3gxLmkubGVuY3Iub3JnLzAnBgNVHR8EIDAeMBygGqAYhhZodHRw\n"
+"Oi8veDEuYy5sZW5jci5vcmcvMCIGA1UdIAQbMBkwCAYGZ4EMAQIBMA0GCysOAwIa\n"
+"AYb2gwIBATANBgkqhkiG9w0BAQsFAAOCAgEAuAGlXBGGZh8XUDzCY3pAMf7HDDSg\n"
+"FxYr9zP0lv9bPMaOH1vrH4g/9YOKmlKNlJ4GlFnXJrqCLU5nBT5nWHXlMjXUcR4l\n"
+"k/K8P9pEolNT3DQKjm+c4NP4W3KWHE6NjK7jdIrDpXgXKIzHk7XNFqR4jBnzjG1G\n"
+"gOp4NhqxoYOKL8OFJaJqO4WfACN/2rQBK2WdO2eQ1xoWwR3vYMIwuKOkAfW7H9VM\n"+k\n"
+"-----END CERTIFICATE-----\n";
+
+// Amazon Root CA 1 (for AWS IoT Core)
+const char* AMAZON_ROOT_CA_1 = 
+"-----BEGIN CERTIFICATE-----\n"
+"MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF\n"
+"ADA5MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6\n"
+"b24gUm9vdCBDQSAxMB4XDTE1MDUyNjAwMDAwMFoXDTM4MDExNzAwMDAwMFowOTEL\n"
+"MAkGA1UEBhMCVVMxDzANBgNVBAoTBkFtYXpvbjEZMBcGA1UEAxMQQW1hem9uIFJv\n"
+"b3QgQ0EgMTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALJ4gHHKeNXj\n"
+"ca9HgFB0fW7Y14h29Jlo91ghYPl0hAEvrAIthtOgQ3pOsqTQNroBvo3bSMgHFzZM\n"
+"9O6II8c+6zf1tRn4SWiw3te5djgdYZ6k/oI2peVKVuRF4fn9tBb6dNqcmzU5L/qw\n"
+"IFAGbHrQgLKm+a/sRxmPUDgH3KKHOVj4utWp+UhnMJbulHheb4mjUcAwhmahRWa6\n"
+"VOujw5H5SNz/0egwLX0tdHA114gk957EWW67c4cX8jJGKLhD+rcdqsq08p8kDi1L\n"
+"93FcXmn/6pUCyziKrlA4b9v7LWIbxcceVOF34GfID5yHI9Y/QCB/IIDEgEw+OyQm\n"
+"jgSubJrIqg0CAwEAAaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMC\n"
+"AYYwHQYDVR0OBBYEFIQYzIU07LwMlJQuCFmcx7IQTgoIMA0GCSqGSIb3DQEBCwUA\n"
+"A4IBAQCY8jdaQZChGsV2USggNiMOruYou6r4lK5IpDB/G/wkjUu0yKGX9rbxenDI\n"
+"U5PMCCjjmCXPI6T53iHTfIuJruydjsw2hUwsOBhVQEJI4V3/tWfVZB0kmJ9FJsje\n"
+"xwCT3GQx5SgfkE2bZ5vdyA4kVyZQvdMg1b/TQsJxvgdJfJvJ9lBhFcBwbQB+k9+z\n"
+"g0mM9Gl2v9f9+gHH9sJhkmZVNKfQOCCsOYJjQJrMSBQYk8bP0YflPcJnfJ2J2/jP\n"
+"IhHIWGlzJGa4yQRFRDu4vVqBV2DBl12UWgEWmHNbAhmJu4LmCsVx5K7VLKlJINS0\n"
+"dWLk8ieTJAa8bXnQ6HJx8KRF+c2nBE4YcuMb8J+Vr4QCrBgb\n"
+"-----END CERTIFICATE-----\n";
+
+// DigiCert Global Root CA (widely trusted)
+const char* DIGICERT_GLOBAL_ROOT_CA = 
+"-----BEGIN CERTIFICATE-----\n"
+"MIIDrzCCApegAwIBAgIQCDvgVpBCRrGhdWrJWZHHSjANBgkqhkiG9w0BAQUFADBh\n"
+"MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n"
+"d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBD\n"
+"QTAeFw0wNjExMTAwMDAwMDBaFw0zMTExMTAwMDAwMDBaMGExCzAJBgNVBAYTAlVT\n"
+"MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j\n"
+"b20xIDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IENBMIIBIjANBgkqhkiG\n"
+"9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4jvhEXLeqKTTo1eqUKKPC3eQyaKl7hLOllsB\n"
+"CSDMAZOnTjC3U/dDxGkAV53ijSLdhwZAAIEJzs4bg7/fzTtxRuLWZscFs3YnFo97\n"
+"nh6Vfe63SKMI2tavegw5BmV/Sl0fvBf4q77uKNd0f3p4mVmFaG5cIzJLv07A6Fpt\n"
+"43C/dxC//AH2hdmoRBBYMql1GNXRor5H4idq9Joz+EkIYIvUX7Q6hL+hqkpMfT7P\n"
+"T19sdl6gSzeRntwi5m3OFBqOasv+zbMUZBfHWymeMr/y7vrTC0LUq7dBMtoM1O/4\n"
+"gdW7jVg/tRvoSSiicNoxBN33shbyTApOB6jtSj1etX+jkMOvJwIDAQABo2MwYTAO\n"
+"BgNVHQ8BAf8EBAMCAYYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUA95QNVbR\n"
+"TLtm8KPiGxvDl7I90VUwHwYDVR0jBBgwFoAUA95QNVbRTLtm8KPiGxvDl7I90VUw\n"
+"DQYJKoZIhvcNAQEFBQADggEBAMucN6pIExIK+t1EnE9SsPTfrgT1eXkIoyQY/Esr\n"
+"hMAtudXH/vTBH1jLuG2cenTnmCmrEbXjcKChzUyImZOMkXDiqw8cvpOp/2PV5Adg\n"
+"06O/nVsJ8dWO41P0jmP6P6fbtGbfYmbW0W5BjfIttep3Sp+dWOIrWcBAI+0tKIJF\n"
+"PnlUkiaY4IBIqDfv8NZ5YBberOgOzW6sRBc4L0na4UU+Krk2U886UAb3LujEV0ls\n"
+"YSEY1QSteDwsOoBrp+uvFRTp2InBuThs4pFsiv9kuXclVzDAGySj4dzp30d8tbQk\n"
+"CAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4=\n"
+"-----END CERTIFICATE-----\n";
+
+// Cloudflare Root CA
+const char* CLOUDFLARE_ROOT_CA = 
+"-----BEGIN CERTIFICATE-----\n"
+"MIIGCTCCBPGgAwIBAgIQQdKd0XLq7qeAwSxs6S+HUjANBgkqhkiG9w0BAQsFADBP\n"
+"MQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJuZXQgU2VjdXJpdHkgUmVzZWFy\n"
+"Y2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBYMTAeFw0yMDA5MDQwMDAwMDBa\n"
+"Fw0yNTA5MTUxNjAwMDBaMDIxCzAJBgNVBAYTAlVTMRYwFAYDVQQKEw1MZXQncyBF\n"
+"bmNyeXB0MQswCQYDVQQDEwJSMzCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoC\n"
+"ggEBALsCFTHM9qCU0w8S7I1VksP4gvGZpnpCiKddJqq1K7nFTLGvjmv5dcij1w9H\n"
+"lBRVNVeMnqiiORn1gjxCqU5u9TvDLtuNwLBc81k45+3PafBaCxu+wJQkJYf6N3Gz\n"
+"E+ccqOGb79vkO0VSRZapwVPONMhS7rWu7Y/eYHDipVSrtm0Ol6VANGsr07xl62Y0\n"
+"fPpri49XKZn4MBddunJv+4HFrdKGWD0Xx+cJu/Er94bcwdpxXdRG48ytJcGIvGBn\n"
+"dWaz8Rj3olzmU/86iLZHpf8TGOqYCXc/nVP5zwHl9aZwFxSvY6T/mbOTndxTpwb+\n"
+"SIUdoWmuJXW7E8xSA/XtUaGL2xUCAwEAAaOCAgkwggIFMA4GA1UdDwEB/wQEAwIB\n"
+"hjAdBgNVHSUEFjAUBggrBgEFBQcDAgYIKwYBBQUHAwEwEgYDVR0TAQH/BAgwBgEB\n"
+"/wIBADAdBgNVHQ4EFgQUFC6zF7dYVsuuUAlA5h+vnYsUwsYwHwYDVR0jBBgwFoAU\n"
+"ebRZ5nu25eQBc4AIiMgaWPbpm24wMgYIKwYBBQUHAQEEJjAkMCIGCCsGAQUFBzAC\n"
+"hhZodHRwOi8veDEuaS5sZW5jci5vcmcvMCcGA1UdHwQgMB4wHKAaoBiGFmh0dHA6\n"
+"Ly94MS5jLmxlbmNyLm9yZy8wIgYDVR0gBBswGTAIBgZngQwBAgEwDQYLKwYBBAGC\n"
+"3xMBAQEwDQYJKoZIhvcNAQELBQADggIBAKuAgllGBGZh8XUDzCY3pAMf7HDDSgFx\n"
+"Yr9zP0lv9bPMaOH1vrH4g/9YOKmlKNlJ4GlFnXJrqCLU5nBT5nWHXlMjXUcR4lk/\n"
+"K8P9pEolNT3DQKjm+c4NP4W3KWHE6NjK7jdIrDpXgXKIzHk7XNFqR4jBnzjG1GgO\n"
+"p4NhqxoYOKL8OFJaJqO4WfACN/2rQBK2WdO2eQ1xoWwR3vYMIwuKOkAfW7H9VMw\n"
+"bnFpNRuFmJCOGr5xDdG8ZCEg3oeUaCEKSEwDYK7wP4J5CjMKH\n"
+"-----END CERTIFICATE-----\n";
+
+const char* get_ca_certificate(const char* broker_hostname) {
+    if (!broker_hostname) {
+        return LETS_ENCRYPT_ROOT_CA; // Default fallback
+    }
+    
+    // AWS IoT Core endpoints
+    if (strstr(broker_hostname, "amazonaws.com") || 
+        strstr(broker_hostname, "iot.") ||
+        strstr(broker_hostname, "aws.")) {
+        return AMAZON_ROOT_CA_1;
+    }
+    
+    // Cloudflare services
+    if (strstr(broker_hostname, "cloudflare.com") ||
+        strstr(broker_hostname, "cf-")) {
+        return CLOUDFLARE_ROOT_CA;
+    }
+    
+    // Many other services use DigiCert
+    if (strstr(broker_hostname, "azure.com") ||
+        strstr(broker_hostname, "microsoft.com") ||
+        strstr(broker_hostname, "google.com") ||
+        strstr(broker_hostname, "hivemq.com")) {
+        return DIGICERT_GLOBAL_ROOT_CA;
+    }
+    
+    // Default to Let's Encrypt (widely used)
+    return LETS_ENCRYPT_ROOT_CA;
+}

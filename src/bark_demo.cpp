@@ -1,47 +1,82 @@
 /**
  * @file bark_demo.cpp
- * @brief Demo application for ESP32-S3 TinyML Dog Bark Detection
+ * @brief ESP32-S3 TinyML Dog Bark Detection with MQTT Alerts
  * 
- * Demonstrates real-time bark detection using INMP441 microphone
- * and displays results via serial output.
+ * Complete demonstration application featuring:
+ * - Real-time audio classification using TensorFlow Lite Micro
+ * - MQTT alerts with TLS encryption for bark events
+ * - Serial interface for configuration and monitoring
+ * - WiFi provisioning integration
  */
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include "audio_capture.h"
+#include "preprocess.h"
 #include "bark_detector_api.h"
+#include "mqtt_client.h"
+#include "mqtt_provisioning.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_system.h"
+#include "esp_wifi.h"
+#include "nvs_flash.h"
+#include <string.h>
+#include <stdio.h>
+#include <time.h>
+#include <sys/time.h>
 
-static const char* TAG = "BarkDemo";
+static const char* TAG = "bark_demo";
 
-// Demo configuration
-BarkDetector::Config bark_config;
-BarkDetector::BarkDetector detector;
+// System state
+static bool detection_active = false;
+static uint32_t bark_count = 0;
+static float detection_threshold = 0.7f;
+static bark_sensitivity_t sensitivity_level = BARK_SENSITIVITY_MEDIUM;
 
-// Statistics tracking
-uint32_t total_barks = 0;
-uint32_t session_start_time = 0;
+// MQTT state
+static bool mqtt_enabled = false;
+static bool mqtt_connected = false;
+static uint32_t bark_sequence = 0;
+static char device_mac[18] = {0};
+static char firmware_version[] = "1.0.0";
+
+// Forward declarations
+static void bark_detected_callback(bark_detection_event_t* event);
+static void mqtt_status_callback(bool connected, esp_err_t error_code);
+static void publish_bark_alert(const bark_detection_event_t* event);
+static esp_err_t initialize_mqtt(void);
 
 /**
- * @brief Bark detection callback function
+ * @brief Bark detection callback function with MQTT integration
  */
-void onBarkDetected(const BarkDetector::BarkEvent& event) {
-    total_barks++;
+static void bark_detected_callback(bark_detection_event_t* event) {
+    bark_count++;
+    bark_sequence++;
     
-    const char* class_name = BarkDetector::Utils::audioClassToString(event.detected_class);
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
     
-    Serial.printf("\n🐕 BARK DETECTED! 🐕\n");
-    Serial.printf("Class: %s\n", class_name);
-    Serial.printf("Confidence: %.2f%%\n", event.confidence * 100.0f);
-    Serial.printf("Duration: %d ms\n", event.duration_ms);
-    Serial.printf("RMS Level: %.3f\n", event.rms_level);
-    Serial.printf("Peak Level: %.3f\n", event.peak_level);
-    Serial.printf("Timestamp: %d ms\n", event.timestamp_ms);
-    Serial.printf("Total Barks: %d\n", total_barks);
-    Serial.println("========================");
+    ESP_LOGI(TAG, "🐕 BARK DETECTED #%lu!", bark_count);
+    ESP_LOGI(TAG, "   Confidence: %.2f%%", event->confidence * 100.0f);
+    ESP_LOGI(TAG, "   Duration: %dms", event->duration_ms);
+    ESP_LOGI(TAG, "   RMS Level: %d", event->rms_level);
+    ESP_LOGI(TAG, "   Peak Level: %d", event->peak_level);
+    ESP_LOGI(TAG, "   Timestamp: %ld.%03ld", tv.tv_sec, tv.tv_usec / 1000);
     
-    // Optional: Flash LED or trigger GPIO
+    Serial.printf("\n🔔 Bark Alert: Confidence=%.1f%%, Duration=%dms\n", 
+           event->confidence * 100.0f, event->duration_ms);
+    
+    // Publish MQTT alert if enabled and connected
+    if (mqtt_enabled && mqtt_connected) {
+        publish_bark_alert(event);
+        Serial.printf("📡 MQTT alert sent\n");
+    }
+    
+    Serial.printf("\n");
+    
+    // Flash LED to indicate detection
     digitalWrite(LED_BUILTIN, HIGH);
     delay(100);
     digitalWrite(LED_BUILTIN, LOW);
