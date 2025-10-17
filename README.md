@@ -2,6 +2,19 @@
 
 🎤 **Professional-grade audio streaming system** with ESP32-WROOM-32 and INMP441 digital microphone, featuring **secure external access** via encrypted WebRTC.
 
+## ⚠️ **IMPORTANT: Branch Information**
+
+**📍 You are viewing the `main` branch** which contains the **basic WiFi provisioning sample** with KY-038 analog sensor.
+
+**🚀 For WebRTC audio streaming features, switch to:**
+- **`feature-webrtc-INMP441`** - Complete WebRTC implementation with security
+- **`feature-barebones`** - Simplified WiFi provisioning alternatives
+
+```bash
+# Get the WebRTC features:
+git checkout feature-webrtc-INMP441
+```
+
 ## 🌟 **Key Features**
 
 - **🔊 High-Quality Audio**: INMP441 I2S digital microphone with 24-bit capture
@@ -13,17 +26,25 @@
 
 ## 🚀 **Quick Start**
 
-### **📱 For Mobile/External Access (Recommended)**
-**👉 Follow [HOWTO.md](HOWTO.md) for complete setup guide!**
+### **📱 For WebRTC Audio Streaming (Most Users)**
 
 ```bash
 git clone https://github.com/rickenator/esp32-wroom-32-AP-Provision.git
 cd esp32-wroom-32-AP-Provision
 
+# Switch to WebRTC branch (REQUIRED for audio features)
+git checkout feature-webrtc-INMP441
+
 # Deploy secure firmware
 ./switch-firmware.sh secure && pio run --target upload
 
 # Then follow HOWTO.md for router setup and external access
+```
+
+### **🏠 Basic WiFi Provisioning (This Branch)**
+```bash
+# This main branch contains basic WiFi provisioning with KY-038
+pio run --target upload
 ```
 
 ### **🏠 Local Development**
@@ -37,11 +58,13 @@ cd esp32-wroom-32-AP-Provision
 
 ## 📚 **Documentation**
 
-- **[HOWTO.md](HOWTO.md)** - ⭐ **START HERE** - Complete setup for mobile access
-- **[SECURITY-IMPLEMENTATION.md](SECURITY-IMPLEMENTATION.md)** - Security architecture and threat model
-- **[ROUTER-CONFIGURATION.md](ROUTER-CONFIGURATION.md)** - Router setup for external access
-- **[THEORY-OF-OPERATIONS.md](THEORY-OF-OPERATIONS.md)** - Technical architecture details
-- **[WIRING-INMP441.md](WIRING-INMP441.md)** - Hardware wiring guide
+**⚠️ Note: Comprehensive documentation is available in the `feature-webrtc-INMP441` branch**
+
+- **[HOWTO.md](https://github.com/rickenator/esp32-wroom-32-AP-Provision/blob/feature-webrtc-INMP441/HOWTO.md)** - ⭐ **START HERE** - Complete setup for mobile access
+- **[SECURITY-IMPLEMENTATION.md](https://github.com/rickenator/esp32-wroom-32-AP-Provision/blob/feature-webrtc-INMP441/SECURITY-IMPLEMENTATION.md)** - Security architecture and threat model
+- **[ROUTER-CONFIGURATION.md](https://github.com/rickenator/esp32-wroom-32-AP-Provision/blob/feature-webrtc-INMP441/ROUTER-CONFIGURATION.md)** - Router setup for external access
+- **[THEORY-OF-OPERATIONS.md](https://github.com/rickenator/esp32-wroom-32-AP-Provision/blob/feature-webrtc-INMP441/THEORY-OF-OPERATIONS.md)** - Technical architecture details
+- **[WIRING-INMP441.md](https://github.com/rickenator/esp32-wroom-32-AP-Provision/blob/feature-webrtc-INMP441/WIRING-INMP441.md)** - Hardware wiring guide
 
 ## 🔧 **Hardware Requirements**
 
@@ -69,9 +92,11 @@ cd esp32-wroom-32-AP-Provision
 
 ## 🌿 **Branch Structure**
 
-- **`main`** - Production-ready secure WebRTC firmware
-- **`feature-webrtc-INMP441`** - Latest development with all features
+- **`main`** - ⚠️ **Basic WiFi provisioning sample** (original KY-038 sensor code)
+- **`feature-webrtc-INMP441`** - 🚀 **Complete WebRTC implementation** with INMP441 + security
 - **`feature-barebones`** - Simplified WiFi provisioning alternatives
+
+**💡 Most users want the `feature-webrtc-INMP441` branch for full functionality!**
 
 ## 🎯 **What Makes This Special**
 
