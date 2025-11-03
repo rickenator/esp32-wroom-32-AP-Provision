@@ -38,6 +38,7 @@
 #include "mqtt_client.h"
 #include "mqtt_provisioning.h"
 #include "esp_log.h"
+#include "esp_mac.h"
 
 static const char* TAG = "unified_detector";
 
@@ -148,6 +149,9 @@ std::map<String, bool> blockedClients;
 QueueHandle_t securityLogQueue;
 String jwtSecret;
 
+// Security log buffer
+#define SEC_LOG_MAX_LEN 256
+
 // Audio & Streaming
 int16_t* audioRingBuffer = nullptr;
 volatile size_t ringBufferWritePos = 0;
@@ -174,6 +178,46 @@ TaskHandle_t streamingTaskHandle = nullptr;
 TaskHandle_t securityTaskHandle = nullptr;
 
 // ==================== UTILITY FUNCTIONS ====================
+
+String base64UrlEncode(const String& input) {
+    const char* base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    String encoded = "";
+    int val = 0;
+    int valb = -6;
+    
+    for (unsigned char c : input) {
+        val = (val << 8) + c;
+        valb += 8;
+        while (valb >= 0) {
+            encoded += base64_chars[(val >> valb) & 0x3F];
+            valb -= 6;
+        }
+    }
+    if (valb > -6) {
+        encoded += base64_chars[((val << 8) >> (valb + 8)) & 0x3F];
+    }
+    // Base64url uses - and _ and no padding
+    return encoded;
+}
+
+String base64UrlDecode(const String& input) {
+    const char* base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    String decoded = "";
+    int val = 0;
+    int valb = -8;
+    
+    for (char c : input) {
+        const char* ptr = strchr(base64_chars, c);
+        if (ptr == nullptr) continue;
+        val = (val << 6) + (ptr - base64_chars);
+        valb += 6;
+        if (valb >= 0) {
+            decoded += char((val >> valb) & 0xFF);
+            valb -= 8;
+        }
+    }
+    return decoded;
+}
 
 String hashPassword(const String& password, const String& salt) {
     uint8_t hash[32];
@@ -203,6 +247,7 @@ String generateJWT(const String& username, SecurityLevel level) {
     
     String headerStr;
     serializeJson(header, headerStr);
+    String headerB64 = base64UrlEncode(headerStr);
     
     DynamicJsonDocument payload(256);
     payload["sub"] = username;
@@ -212,10 +257,14 @@ String generateJWT(const String& username, SecurityLevel level) {
     
     String payloadStr;
     serializeJson(payload, payloadStr);
+    String payloadB64 = base64UrlEncode(payloadStr);
     
-    String signature = hashPassword(headerStr + "." + payloadStr, jwtSecret);
+    // Create HMAC-SHA256 signature
+    String dataToSign = headerB64 + "." + payloadB64;
+    String signature = hashPassword(dataToSign, jwtSecret);
+    String signatureB64 = base64UrlEncode(signature);
     
-    return headerStr + "." + payloadStr + "." + signature;
+    return headerB64 + "." + payloadB64 + "." + signatureB64;
 }
 
 bool validateJWT(const String& token, SecurityLevel requiredLevel) {
@@ -226,15 +275,18 @@ bool validateJWT(const String& token, SecurityLevel requiredLevel) {
     
     String headerB64 = token.substring(0, firstDot);
     String payloadB64 = token.substring(firstDot + 1, secondDot);
-    String signature = token.substring(secondDot + 1);
+    String signatureB64 = token.substring(secondDot + 1);
     
     // Verify signature
-    String expectedSig = hashPassword(headerB64 + "." + payloadB64, jwtSecret);
-    if (signature != expectedSig) return false;
+    String dataToSign = headerB64 + "." + payloadB64;
+    String expectedSig = hashPassword(dataToSign, jwtSecret);
+    String expectedSigB64 = base64UrlEncode(expectedSig);
+    if (signatureB64 != expectedSigB64) return false;
     
-    // Parse payload
+    // Decode and parse payload
+    String payloadJson = base64UrlDecode(payloadB64);
     DynamicJsonDocument payload(512);
-    if (deserializeJson(payload, payloadB64) != DeserializationError::Ok) return false;
+    if (deserializeJson(payload, payloadJson) != DeserializationError::Ok) return false;
     
     // Check expiration
     if (payload["exp"] < time(NULL)) return false;
@@ -283,10 +335,10 @@ void logSecurityEvent(SecurityEvent event, const String& clientIP, const String&
     logEntry["details"] = details;
     logEntry["device_id"] = deviceMac;
     
-    String logStr;
-    serializeJson(logEntry, logStr);
+    char logBuffer[SEC_LOG_MAX_LEN];
+    serializeJson(logEntry, logBuffer, sizeof(logBuffer));
     
-    if (xQueueSend(securityLogQueue, &logStr, pdMS_TO_TICKS(100)) != pdTRUE) {
+    if (xQueueSend(securityLogQueue, logBuffer, pdMS_TO_TICKS(100)) != pdTRUE) {
         ESP_LOGW(TAG, "Security log queue full");
     }
 }
@@ -384,11 +436,41 @@ size_t getAvailableSamples() {
 // ==================== RTP STREAMING ====================
 
 uint8_t encodeAlaw(int16_t sample) {
-    int16_t sign = (sample >> 8) & 0x80;
-    if (sign != 0) sample = -sample;
-    if (sample > 32635) sample = 32635;
+    // G.711 A-law encoding with proper logarithmic companding
+    const uint16_t ALAW_MAX = 0xFFF;
+    int16_t sign = 0;
+    int16_t absValue;
     
-    return (uint8_t)(sign | ((sample >> 8) & 0x7F));
+    // Get sign and absolute value
+    if (sample < 0) {
+        sign = 0x80;
+        absValue = -sample;
+    } else {
+        absValue = sample;
+    }
+    
+    // Clip to maximum
+    if (absValue > ALAW_MAX) {
+        absValue = ALAW_MAX;
+    }
+    
+    // Convert to A-law segments (13-bit to 8-bit logarithmic)
+    int segment = 0;
+    int quantization = (absValue >> 4) & 0x0F;
+    
+    if (absValue >= 256) {
+        segment = 1;
+        while (absValue >= (256 << segment) && segment < 7) {
+            segment++;
+        }
+        quantization = ((absValue >> (segment + 3)) & 0x0F);
+    }
+    
+    // Construct A-law byte: sign(1) + segment(3) + quantization(4)
+    uint8_t alaw = sign | ((segment << 4) | quantization);
+    
+    // A-law XOR with 0x55 for transmission
+    return alaw ^ 0x55;
 }
 
 size_t createRTPPacket(uint8_t* packet, int16_t* audioSamples, size_t sampleCount, StreamingClient& client) {
@@ -581,11 +663,11 @@ void streamingTask(void* parameter) {
 void securityTask(void* parameter) {
     ESP_LOGI(TAG, "Security task started on core %d", xPortGetCoreID());
     
-    String logEntry;
+    char logEntry[SEC_LOG_MAX_LEN];
     while (true) {
         // Process security log queue
-        if (xQueueReceive(securityLogQueue, &logEntry, pdMS_TO_TICKS(1000)) == pdTRUE) {
-            ESP_LOGI(TAG, "Security event: %s", logEntry.c_str());
+        if (xQueueReceive(securityLogQueue, logEntry, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            ESP_LOGI(TAG, "Security event: %s", logEntry);
         }
         
         // Cleanup expired sessions periodically
@@ -1002,7 +1084,7 @@ void setup() {
     ESP_LOGI(TAG, "Device MAC: %s", deviceMac);
     
     // Initialize security
-    securityLogQueue = xQueueCreate(50, sizeof(String));
+    securityLogQueue = xQueueCreate(50, SEC_LOG_MAX_LEN);
     initializeDefaultUsers();
     
     // Initialize WiFi
@@ -1091,8 +1173,9 @@ void setup() {
     // Initialize MQTT
     initializeMQTT();
     
-    // Create FreeRTOS tasks
-    xTaskCreatePinnedToCore(audioTask, "AudioTask", 8192, NULL, 2, &audioTaskHandle, 0);
+    // Create FreeRTOS tasks with balanced priorities
+    // Priority: audio=3 (highest), bark=2, streaming=2, security=1
+    xTaskCreatePinnedToCore(audioTask, "AudioTask", 8192, NULL, 3, &audioTaskHandle, 0);
     xTaskCreatePinnedToCore(barkDetectionTask, "BarkTask", 8192, NULL, 2, &barkDetectionTaskHandle, 1);
     xTaskCreatePinnedToCore(streamingTask, "StreamTask", 4096, NULL, 2, &streamingTaskHandle, 1);
     xTaskCreatePinnedToCore(securityTask, "SecurityTask", 4096, NULL, 1, &securityTaskHandle, 0);
