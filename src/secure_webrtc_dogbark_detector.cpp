@@ -179,6 +179,9 @@ TaskHandle_t securityTaskHandle = nullptr;
 
 // ==================== UTILITY FUNCTIONS ====================
 
+// Base64url encoding for JWT (RFC 4648)
+// Note: This is a simplified implementation. For production use with external
+// JWT validators, consider using a well-tested library like mbedTLS base64 functions.
 String base64UrlEncode(const String& input) {
     const char* base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     String encoded = "";
@@ -380,7 +383,8 @@ bool authenticateUser(const String& username, const String& password) {
 // ==================== AUDIO RING BUFFER ====================
 
 size_t writeToRingBuffer(const int16_t* samples, size_t count) {
-    if (xSemaphoreTake(audioMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+    // Use longer timeout for audio-critical operations
+    if (xSemaphoreTake(audioMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         size_t written = 0;
         for (size_t i = 0; i < count; i++) {
             size_t nextPos = (ringBufferWritePos + 1) % AUDIO_BUFFER_SIZE;
@@ -441,10 +445,11 @@ uint8_t encodeAlaw(int16_t sample) {
     int16_t sign = 0;
     int16_t absValue;
     
-    // Get sign and absolute value
+    // Get sign and absolute value (handle INT16_MIN edge case)
     if (sample < 0) {
         sign = 0x80;
-        absValue = -sample;
+        // Avoid overflow when sample is INT16_MIN (-32768)
+        absValue = (sample == INT16_MIN) ? INT16_MAX : -sample;
     } else {
         absValue = sample;
     }
@@ -612,7 +617,15 @@ void barkDetectionTask(void* parameter) {
             // Process frame with TinyML detector
             BarkDetector::AudioClass result = detector.processFrame(analysisBuffer, SAMPLES_PER_FRAME);
             
-            // Note: detector.start() should have been called with barkDetectedCallback
+            // Log classification for debugging (non-bark classes)
+            if (result != BarkDetector::AudioClass::DOG_BARK && result != BarkDetector::AudioClass::UNKNOWN) {
+                static uint32_t logCounter = 0;
+                if (++logCounter % 100 == 0) { // Log every 100 frames (~2 seconds)
+                    ESP_LOGD(TAG, "Classification: %d", (int)result);
+                }
+            }
+            
+            // Note: detector.start() was called with barkDetectedCallback
             // The callback will be invoked automatically when a bark is detected
         }
         
@@ -1173,12 +1186,13 @@ void setup() {
     // Initialize MQTT
     initializeMQTT();
     
-    // Create FreeRTOS tasks with balanced priorities
+    // Create FreeRTOS tasks with balanced priorities and adequate stack sizes
     // Priority: audio=3 (highest), bark=2, streaming=2, security=1
+    // Stack: increased for tasks with JSON/network operations
     xTaskCreatePinnedToCore(audioTask, "AudioTask", 8192, NULL, 3, &audioTaskHandle, 0);
     xTaskCreatePinnedToCore(barkDetectionTask, "BarkTask", 8192, NULL, 2, &barkDetectionTaskHandle, 1);
-    xTaskCreatePinnedToCore(streamingTask, "StreamTask", 4096, NULL, 2, &streamingTaskHandle, 1);
-    xTaskCreatePinnedToCore(securityTask, "SecurityTask", 4096, NULL, 1, &securityTaskHandle, 0);
+    xTaskCreatePinnedToCore(streamingTask, "StreamTask", 6144, NULL, 2, &streamingTaskHandle, 1);
+    xTaskCreatePinnedToCore(securityTask, "SecurityTask", 6144, NULL, 1, &securityTaskHandle, 0);
     
     // Setup and start web server
     setupSecureRoutes();
