@@ -10,6 +10,8 @@
 // For ESP-IDF, these are available from esp_timer.h
 #include "esp_timer.h"
 // Compatibility wrappers for ESP-IDF
+// Note: These will overflow after ~49 days (millis) and ~71 minutes (micros)
+// This matches Arduino behavior and is expected for ESP32 applications
 inline uint32_t millis() { return (uint32_t)(esp_timer_get_time() / 1000ULL); }
 inline uint32_t micros() { return (uint32_t)esp_timer_get_time(); }
 #endif
@@ -27,6 +29,7 @@ inline uint32_t micros() { return (uint32_t)esp_timer_get_time(); }
 #define MEL_BANDS 40
 #define N_FFT_BINS (FFT_SIZE / 2 + 1)
 #define MAX_TIME_FRAMES 32
+#define MAX_MEDIAN_FILTER_SIZE 10  // Maximum supported median filter size
 
 // Mathematical constants
 #define M_PI 3.14159265358979323846
@@ -225,7 +228,7 @@ public:
     }
     
 private:
-    static const int MAX_FILTER_BANKS = 40 * 257; // MEL_BANDS * (FFT_SIZE/2 + 1)
+    static const int MAX_FILTER_BANKS = MEL_BANDS * N_FFT_BINS; // 40 * 257
     float mel_filters[MAX_FILTER_BANKS];
     int sample_rate;
     int n_fft;
@@ -300,6 +303,7 @@ public:
     // Memory management
     uint8_t* tensor_arena;
     size_t tensor_arena_size;
+    bool owns_tensor_arena;  // True if we allocated the arena and should free it
     
     // Audio processing
     MelFilterbank mel_filterbank;
@@ -332,6 +336,7 @@ public:
              op_resolver(nullptr),
              tensor_arena(nullptr),
              tensor_arena_size(0),
+             owns_tensor_arena(false),
              fft_buffer(nullptr),
              power_spectrum(nullptr),
              mel_energies(nullptr),
@@ -374,6 +379,11 @@ public:
             delete op_resolver;
             op_resolver = nullptr;
         }
+        if (tensor_arena && owns_tensor_arena) {
+            free(tensor_arena);
+            tensor_arena = nullptr;
+            owns_tensor_arena = false;
+        }
         if (fft_buffer) {
             delete[] fft_buffer;
             fft_buffer = nullptr;
@@ -394,7 +404,7 @@ public:
     }
     
     bool init_model(const void* model_data, size_t model_size,
-                   void* arena, size_t arena_size) {
+                   void* arena, size_t arena_size, bool take_ownership = false) {
         if (initialized) {
             cleanup();
         }
@@ -404,6 +414,7 @@ public:
         // Store tensor arena
         tensor_arena = (uint8_t*)arena;
         tensor_arena_size = arena_size;
+        owns_tensor_arena = take_ownership;
         
         // Load model
         model = tflite::GetModel(model_data);
@@ -550,7 +561,7 @@ public:
             
             // Calculate median for each class
             for (size_t i = 0; i < num_classes; i++) {
-                float values[10]; // Max median_filter_size
+                float values[MAX_MEDIAN_FILTER_SIZE];
                 size_t count = std::min((size_t)config.median_filter_size, stats.total_inferences);
                 
                 for (size_t j = 0; j < count; j++) {
@@ -677,6 +688,7 @@ bool BarkDetector::initialize(const BarkDetectorConfig& config) {
     // For now, we use placeholder data that needs to be replaced
     
     // Allocate tensor arena (32KB default)
+    // NOTE: This memory is owned by the BarkDetector and will persist for its lifetime
     const size_t arena_size = 32 * 1024;
     void* arena = malloc(arena_size);
     if (!arena) {
@@ -687,12 +699,18 @@ bool BarkDetector::initialize(const BarkDetectorConfig& config) {
     // TODO: Replace with actual model data after training
     // This will fail until user provides trained model
     #ifdef BARK_DETECTOR_MODEL_DATA_AVAILABLE
-    bool success = pImpl->init_model(g_model_data, g_model_data_len, arena, arena_size);
+    // Pass true to take ownership of the allocated arena
+    bool success = pImpl->init_model(g_model_data, g_model_data_len, arena, arena_size, true);
+    if (!success) {
+        // Free arena on initialization failure (init_model won't take ownership if it fails)
+        free(arena);
+    }
+    // Note: On success, arena ownership transfers to pImpl
     #else
     LOG_ERROR("Model data not available. Please train model and include model_data.h");
     LOG_ERROR("Follow instructions in TRAINING.md to train and convert your model");
+    free(arena);  // Free arena since initialization failed
     bool success = false;
-    free(arena);
     #endif
     
     return success;
