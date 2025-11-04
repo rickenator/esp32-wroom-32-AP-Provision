@@ -26,7 +26,7 @@
  *    - See TRAINING.md for complete training pipeline
  */
 
-#include "bark_detector_api.h"
+#include "../include/bark_detector_api.h"
 #include <cmath>
 #include <cstring>
 #include <cstdlib>  // for std::abs

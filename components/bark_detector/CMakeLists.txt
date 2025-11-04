@@ -1,11 +1,10 @@
 idf_component_register(
     SRCS 
-        "src/bark_detector.cpp"
         "src/audio_capture.cpp"
         "src/preprocess.cpp" 
         "src/mqtt_client.cpp"
         "src/mqtt_provisioning.cpp"
-        "src/bark_detector_api.cpp"
+        "src/bark_detector.cpp"
         "src/ca_certificates.cpp"
     INCLUDE_DIRS 
         "include"
