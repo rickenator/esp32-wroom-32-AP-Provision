@@ -13,7 +13,7 @@
 
 ```bash
 # Get the WebRTC features:
-git checkout feature-webrtc-INMP441
+git checkout feature-dogbark-detector
 ```
 
 ## 🌟 **Key Features**
