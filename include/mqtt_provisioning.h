@@ -1,1 +1,0 @@
-<content of mqtt_provisioning.h>
