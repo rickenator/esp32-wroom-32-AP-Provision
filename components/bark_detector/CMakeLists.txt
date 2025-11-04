@@ -5,6 +5,8 @@ idf_component_register(
         "src/preprocess.cpp" 
         "src/mqtt_client.cpp"
         "src/mqtt_provisioning.cpp"
+        "src/bark_detector_api.cpp"
+        "src/ca_certificates.cpp"
     INCLUDE_DIRS 
         "include"
     REQUIRES 
