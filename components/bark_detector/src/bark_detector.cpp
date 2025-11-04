@@ -3,6 +3,17 @@
 #include <cstring>
 #include <algorithm>
 
+// Arduino/ESP32 framework for millis() and micros()
+#ifdef ARDUINO
+#include <Arduino.h>
+#else
+// For ESP-IDF, these are available from esp_timer.h
+#include "esp_timer.h"
+// Compatibility wrappers for ESP-IDF
+inline uint32_t millis() { return (uint32_t)(esp_timer_get_time() / 1000ULL); }
+inline uint32_t micros() { return (uint32_t)esp_timer_get_time(); }
+#endif
+
 // TensorFlow Lite Micro includes
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
@@ -743,17 +754,5 @@ void BarkDetector::get_feature_dimensions(size_t& mel_bands, size_t& time_frames
     time_frames = pImpl->time_frames;
 }
 
-// Utility function for Arduino compatibility
-extern "C" {
-    uint32_t micros() {
-        // This should be implemented by the platform
-        // For ESP32, this is already available
-        return 0; // Placeholder
-    }
-    
-    uint32_t millis() {
-        // This should be implemented by the platform
-        // For ESP32, this is already available
-        return 0; // Placeholder
-    }
-}
+// Note: micros() and millis() are provided by the Arduino/ESP-IDF framework
+// No need to define them here - they are already available on ESP32
