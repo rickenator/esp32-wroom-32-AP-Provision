@@ -12,7 +12,7 @@
 - **`feature-barebones`** - Simplified WiFi provisioning alternatives
 
 ```bash
-# Get the WebRTC features:
+# Get the full featured implementation:
 git checkout feature-dogbark-detector
 ```
 
