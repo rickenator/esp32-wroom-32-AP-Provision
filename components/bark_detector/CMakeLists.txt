@@ -19,6 +19,7 @@ idf_component_register(
         "nvs_flash"
         "esp_wifi"
         "esp_timer"
+        "tflite-lib"
 )
 
 # Add compiler flags for ESP32-S3 SIMD optimization
