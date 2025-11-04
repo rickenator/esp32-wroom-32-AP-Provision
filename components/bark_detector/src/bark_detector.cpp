@@ -1,6 +1,35 @@
+/**
+ * @file bark_detector.cpp
+ * @brief BarkDetector implementation with TensorFlow Lite Micro
+ * 
+ * DESIGN NOTES:
+ * 
+ * 1. Memory Management:
+ *    - Dynamic allocation is used for audio processing buffers
+ *    - ESP32 typically has sufficient heap for these allocations
+ *    - Allocation failures will be caught during initialization
+ *    - Consider using static allocation if heap is constrained
+ * 
+ * 2. Error Handling:
+ *    - Errors are logged via LOG_ERROR macros
+ *    - Can be adapted to ESP_LOGE or platform-specific logging
+ *    - Failed operations return false/null results
+ * 
+ * 3. Platform Compatibility:
+ *    - Works with both Arduino and ESP-IDF frameworks
+ *    - Timing functions (millis/micros) handle overflow as expected
+ *    - All memory allocated is freed in destructor
+ * 
+ * 4. Model Integration:
+ *    - Requires user-trained model via model_data.h
+ *    - BARK_DETECTOR_MODEL_DATA_AVAILABLE flag must be set after training
+ *    - See TRAINING.md for complete training pipeline
+ */
+
 #include "../include/bark_detector_api.h"
 #include <cmath>
 #include <cstring>
+#include <cstdlib>  // for std::abs
 #include <algorithm>
 
 // Arduino/ESP32 framework for millis() and micros()
@@ -72,7 +101,8 @@ inline float calculate_rms(const int16_t* samples, size_t num_samples) {
 inline float calculate_peak(const int16_t* samples, size_t num_samples) {
     int16_t max_val = 0;
     for (size_t i = 0; i < num_samples; i++) {
-        int16_t abs_val = abs(samples[i]);
+        // Use std::abs to handle INT16_MIN correctly
+        int16_t abs_val = std::abs(samples[i]);
         if (abs_val > max_val) max_val = abs_val;
     }
     return max_val / 32768.0f;
@@ -470,10 +500,16 @@ public:
                 input_size, mel_bands, time_frames);
         
         // Allocate audio processing buffers
-        fft_buffer = new FFT::Complex[FFT_SIZE];
-        power_spectrum = new float[N_FFT_BINS];
-        mel_energies = new float[mel_bands];
-        median_buffer = new float[config.median_filter_size * 4]; // For all 4 classes
+        fft_buffer = new (std::nothrow) FFT::Complex[FFT_SIZE];
+        power_spectrum = new (std::nothrow) float[N_FFT_BINS];
+        mel_energies = new (std::nothrow) float[mel_bands];
+        median_buffer = new (std::nothrow) float[config.median_filter_size * 4]; // For all 4 classes
+        
+        if (!fft_buffer || !power_spectrum || !mel_energies || !median_buffer) {
+            LOG_ERROR("Failed to allocate audio processing buffers");
+            cleanup();
+            return false;
+        }
         
         // Initialize mel filterbank
         if (!mel_filterbank.initialize(SAMPLE_RATE, FFT_SIZE, mel_bands)) {
@@ -593,7 +629,11 @@ public:
         uint32_t preproc_start = micros();
         
         // Apply AGC
-        int16_t* mutable_samples = new int16_t[num_samples];
+        int16_t* mutable_samples = new (std::nothrow) int16_t[num_samples];
+        if (!mutable_samples) {
+            LOG_ERROR("Failed to allocate memory for audio preprocessing");
+            return result;
+        }
         memcpy(mutable_samples, audio_samples, num_samples * sizeof(int16_t));
         AudioUtils::apply_agc(mutable_samples, num_samples, config.agc_target_level);
         
