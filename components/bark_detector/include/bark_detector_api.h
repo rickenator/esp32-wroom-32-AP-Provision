@@ -1,215 +1,179 @@
-/**
- * @file bark_detector_api.h
- * @brief Public API for ESP32-S3 TinyML Dog Bark Detection System
- * 
- * High-level interface for real-time dog bark classification using
- * INMP441 I2S microphone and TensorFlow Lite Micro neural network.
- * 
- * @author ESP32 Dog Bark Detection Team
- * @date October 2025
- */
+#ifndef BARK_DETECTOR_API_H
+#define BARK_DETECTOR_API_H
 
-#pragma once
-
-#include <functional>
 #include <cstdint>
-
-namespace BarkDetector {
+#include <cstddef>
 
 /**
- * @brief Audio classification results
+ * @brief Bark detection classes
  */
-enum class AudioClass {
+enum class BarkClass : uint8_t {
     DOG_BARK = 0,
     SPEECH = 1,
-    AMBIENT = 2, 
+    AMBIENT = 2,
     SILENCE = 3,
-    UNKNOWN = 4
+    UNKNOWN = 255
 };
 
 /**
- * @brief Detection event structure
+ * @brief Detection result structure
  */
-struct BarkEvent {
-    AudioClass detected_class;
-    float confidence;           // 0.0 - 1.0
-    uint32_t timestamp_ms;      // System timestamp
-    uint16_t duration_ms;       // Event duration
-    float rms_level;           // Audio RMS level
-    float peak_level;          // Audio peak level
+struct DetectionResult {
+    BarkClass detected_class;
+    float confidence;           // 0.0 to 1.0
+    uint32_t timestamp_ms;
+    bool is_bark;              // true if detected_class == DOG_BARK and confidence > threshold
+};
+
+/**
+ * @brief Performance statistics
+ */
+struct PerformanceStats {
+    uint32_t inference_time_us;     // Last inference time in microseconds
+    uint32_t avg_inference_time_us; // Running average
+    uint32_t preprocessing_time_us;
+    uint32_t total_inferences;
+    uint32_t bark_detections;
+    float memory_usage_kb;
 };
 
 /**
  * @brief Configuration parameters
  */
-struct Config {
-    // Audio capture settings
-    uint32_t sample_rate = 16000;      // Hz
-    uint16_t frame_size_ms = 20;       // Frame duration
-    uint8_t dma_buffer_count = 10;     // Number of DMA buffers
-    
-    // Detection thresholds
-    float bark_threshold = 0.8f;       // Confidence threshold for bark
-    uint16_t min_duration_ms = 300;    // Minimum bark duration
-    uint16_t debounce_ms = 100;        // Debounce time between events
-    
-    // Preprocessing
-    bool enable_noise_gate = true;
-    float noise_gate_db = -40.0f;      // dB threshold
-    bool enable_agc = true;            // Automatic gain control
-    
-    // Feature extraction
-    uint8_t mel_bands = 40;            // Number of Mel filterbank bands
-    uint16_t fft_size = 512;           // FFT size for spectrogram
-    uint8_t hop_length_ms = 10;        // Frame hop length
-    
-    // Decision logic
-    float ema_alpha = 0.3f;            // Exponential moving average factor
-    uint8_t median_window = 5;         // Median filter window size
+struct BarkDetectorConfig {
+    float confidence_threshold;     // Default: 0.7
+    uint32_t min_bark_duration_ms; // Default: 300ms
+    float agc_target_level;        // Default: 0.5 (normalized)
+    float noise_gate_threshold;    // Default: -40 dB
+    bool enable_temporal_filter;   // Default: true
+    float ema_alpha;               // EMA smoothing factor (0.1-0.5)
+    uint8_t median_filter_size;    // Default: 3
 };
 
 /**
- * @brief Bark detection callback function type
- */
-using BarkCallback = std::function<void(const BarkEvent& event)>;
-
-/**
- * @brief Main bark detector class
+ * @brief BarkDetector API
+ * 
+ * Main interface for bark detection using TensorFlow Lite Micro.
+ * Supports 4-class classification: DOG_BARK, SPEECH, AMBIENT, SILENCE
  */
 class BarkDetector {
 public:
     /**
-     * @brief Constructor
+     * @brief Construct a new BarkDetector object
      */
     BarkDetector();
     
     /**
-     * @brief Destructor
+     * @brief Destroy the BarkDetector object
      */
     ~BarkDetector();
     
     /**
-     * @brief Initialize the bark detector
+     * @brief Initialize the detector with model data
+     * 
+     * @param model_data Pointer to TFLite model data (aligned)
+     * @param model_size Size of model data in bytes
+     * @param tensor_arena Pointer to tensor arena memory
+     * @param arena_size Size of tensor arena in bytes (recommend 32KB-64KB)
+     * @return true if initialization successful
+     */
+    bool initialize(const void* model_data, size_t model_size,
+                   void* tensor_arena, size_t arena_size);
+    
+    /**
+     * @brief Initialize with default configuration
+     * 
      * @param config Configuration parameters
      * @return true if initialization successful
      */
-    bool initialize(const Config& config = Config{});
+    bool initialize(const BarkDetectorConfig& config);
     
     /**
-     * @brief Start bark detection
-     * @param callback Function to call when bark is detected
-     * @return true if started successfully
+     * @brief Process audio samples and detect barks
+     * 
+     * @param audio_samples Pointer to audio samples (16-bit PCM)
+     * @param num_samples Number of samples (should match model input requirement)
+     * @param sample_rate Sample rate in Hz (default 16000)
+     * @return DetectionResult with classification and confidence
      */
-    bool start(BarkCallback callback);
+    DetectionResult process(const int16_t* audio_samples, size_t num_samples, 
+                           uint32_t sample_rate = 16000);
     
     /**
-     * @brief Stop bark detection
+     * @brief Extract features from audio samples
+     * 
+     * @param audio_samples Pointer to audio samples
+     * @param num_samples Number of samples
+     * @param features Output buffer for features (will be filled with mel spectrogram)
+     * @param feature_size Expected feature size
+     * @return true if feature extraction successful
      */
-    void stop();
+    bool extract_features(const int16_t* audio_samples, size_t num_samples,
+                         float* features, size_t feature_size);
     
     /**
-     * @brief Check if detector is running
-     * @return true if running
+     * @brief Update configuration parameters
+     * 
+     * @param config New configuration
      */
-    bool isRunning() const;
-    
-    /**
-     * @brief Process single audio frame (synchronous)
-     * @param samples 16-bit PCM audio samples
-     * @param sample_count Number of samples
-     * @return Classification result
-     */
-    AudioClass processFrame(const int16_t* samples, size_t sample_count);
+    void update_config(const BarkDetectorConfig& config);
     
     /**
      * @brief Get current configuration
-     * @return Current config
+     * 
+     * @return BarkDetectorConfig Current configuration
      */
-    const Config& getConfig() const;
-    
-    /**
-     * @brief Update configuration (requires restart)
-     * @param config New configuration
-     * @return true if valid configuration
-     */
-    bool setConfig(const Config& config);
+    BarkDetectorConfig get_config() const;
     
     /**
      * @brief Get performance statistics
+     * 
+     * @return PerformanceStats Current performance metrics
      */
-    struct Stats {
-        uint32_t frames_processed;
-        uint32_t barks_detected;
-        uint32_t false_positives;
-        float avg_inference_time_ms;
-        float avg_cpu_usage;
-        size_t memory_usage_bytes;
-    };
-    
-    /**
-     * @brief Get performance statistics
-     * @return Current statistics
-     */
-    Stats getStats() const;
+    PerformanceStats get_stats() const;
     
     /**
      * @brief Reset statistics counters
      */
-    void resetStats();
+    void reset_stats();
     
     /**
-     * @brief Get last classification probabilities
-     * @param probs Array to fill with probabilities [4 classes]
-     * @return true if valid data available
+     * @brief Check if detector is initialized and ready
+     * 
+     * @return true if ready to process audio
      */
-    bool getLastProbabilities(float probs[4]) const;
+    bool is_ready() const;
+    
+    /**
+     * @brief Get the input size required by the model
+     * 
+     * @return size_t Number of samples required per inference
+     */
+    size_t get_input_size() const;
+    
+    /**
+     * @brief Get the feature dimensions (mel bands x time frames)
+     * 
+     * @param mel_bands Output: number of mel frequency bands
+     * @param time_frames Output: number of time frames
+     */
+    void get_feature_dimensions(size_t& mel_bands, size_t& time_frames) const;
 
 private:
+    // pImpl pattern - implementation details hidden
     class Impl;
     Impl* pImpl;
 };
 
-/**
- * @brief Utility functions
- */
-namespace Utils {
-    
-    /**
-     * @brief Convert AudioClass to string
-     * @param cls Audio class
-     * @return String representation
-     */
-    const char* audioClassToString(AudioClass cls);
-    
-    /**
-     * @brief Convert dB to linear scale
-     * @param db Decibel value
-     * @return Linear amplitude
-     */
-    float dbToLinear(float db);
-    
-    /**
-     * @brief Convert linear to dB scale
-     * @param linear Linear amplitude
-     * @return Decibel value
-     */
-    float linearToDb(float linear);
-    
-    /**
-     * @brief Calculate RMS level of audio samples
-     * @param samples Audio samples
-     * @param count Number of samples
-     * @return RMS level (0.0 - 1.0)
-     */
-    float calculateRMS(const int16_t* samples, size_t count);
-    
-    /**
-     * @brief Find peak level in audio samples
-     * @param samples Audio samples
-     * @param count Number of samples
-     * @return Peak level (0.0 - 1.0)
-     */
-    float calculatePeak(const int16_t* samples, size_t count);
+// Helper function to convert BarkClass to string
+inline const char* bark_class_to_string(BarkClass cls) {
+    switch (cls) {
+        case BarkClass::DOG_BARK: return "DOG_BARK";
+        case BarkClass::SPEECH: return "SPEECH";
+        case BarkClass::AMBIENT: return "AMBIENT";
+        case BarkClass::SILENCE: return "SILENCE";
+        default: return "UNKNOWN";
+    }
 }
 
-} // namespace BarkDetector
+#endif // BARK_DETECTOR_API_H
