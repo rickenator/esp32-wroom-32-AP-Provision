@@ -1,10 +1,10 @@
 idf_component_register(
     SRCS 
-        "audio_capture.cpp"
-        "preprocess.cpp" 
-        "mqtt_client.cpp"
-        "mqtt_provisioning.cpp"
-        "bark_detector_api.cpp"
+        "src/bark_detector.cpp"
+        "src/audio_capture.cpp"
+        "src/preprocess.cpp" 
+        "src/mqtt_client.cpp"
+        "src/mqtt_provisioning.cpp"
     INCLUDE_DIRS 
         "include"
     REQUIRES 
