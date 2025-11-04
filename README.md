@@ -7,6 +7,7 @@
 **📍 You are viewing the `main` branch** which contains the **basic WiFi provisioning sample**
 
 **🚀 For WebRTC audio streaming features, switch to:**
+- **`feature-dogbark-detector`** - Advanced AI-powered dog bark detection using ESP32-S3 with TensorFlow Lite Micro and INMP441 digital microphone. Features MQTT notifications with secure WebRTC remote monitoring.
 - **`feature-webrtc-INMP441`** - Complete WebRTC implementation with security
 - **`feature-barebones`** - Simplified WiFi provisioning alternatives
 
